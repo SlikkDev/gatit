@@ -1,0 +1,29 @@
+name: Build (macOS)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Build Swift recorder
+        run: scripts/build-recorder-mac.sh
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Build app bundle
+        working-directory: app/src-tauri
+        run: cargo tauri build --bundles app
+      - name: Zip app (keeps executable permissions)
+        run: ditto -c -k --keepParent app/src-tauri/target/release/bundle/macos/Gatit.app Gatit-macos.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gatit-macos
+          path: Gatit-macos.zip

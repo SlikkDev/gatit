@@ -1,0 +1,13 @@
+# Build output
+target/
+.build/
+app/src-tauri/gen/
+app/src-tauri/binaries/
+
+# Never commit secrets or call data: this repo is public.
+.env
+.env.*
+*.m4a
+*.wav
+recordings/
+.DS_Store

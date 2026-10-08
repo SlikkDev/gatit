@@ -1,0 +1,14 @@
+[package]
+name = "gatit"
+version = "0.1.0"
+description = "Record, transcribe and summarize calls without a bot joining them"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde_json = "1"
+chrono = "0.4"

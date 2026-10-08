@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Gatit</title>
+  <style>
+    :root { color-scheme: light dark; --accent: #e5484d; --muted: #8b8d98; }
+    body { margin: 0; font: 14px -apple-system, "Segoe UI", sans-serif; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; height: 100vh; gap: 20px; user-select: none; }
+    button.record { width: 120px; height: 120px; border-radius: 50%; border: 0; background: var(--accent);
+                    color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
+    button.record.recording { border-radius: 24px; }
+    button.record:disabled { opacity: .5; }
+    #timer { font-variant-numeric: tabular-nums; font-size: 28px; }
+    .meters { display: grid; grid-template-columns: auto 160px; gap: 8px 12px; align-items: center; color: var(--muted); }
+    .meter { height: 6px; border-radius: 3px; background: rgba(127,127,127,.25); overflow: hidden; }
+    .meter div { height: 100%; width: 0; background: #30a46c; transition: width .2s; }
+    #message { color: var(--muted); min-height: 1.4em; text-align: center; padding: 0 16px; }
+    a { color: var(--muted); cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div id="timer">00:00</div>
+  <button id="record" class="record">Record</button>
+  <div class="meters">
+    <span>Me</span><div class="meter"><div id="mic"></div></div>
+    <span>Them</span><div class="meter"><div id="system"></div></div>
+  </div>
+  <div id="message"></div>
+  <a id="open">Open recordings folder</a>
+  <script src="main.js"></script>
+</body>
+</html>
