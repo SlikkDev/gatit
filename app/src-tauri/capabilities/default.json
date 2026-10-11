@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Lets the main window call the recorder commands and listen for its events.",
+  "description": "Lets the main window call the app's commands and listen for its events.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

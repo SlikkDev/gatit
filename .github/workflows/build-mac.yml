@@ -6,24 +6,67 @@ on:
   pull_request:
 
 jobs:
-  build:
-    runs-on: macos-15
+  test:
+    name: Rust tests (Linux)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: app/src-tauri
+      - name: Install Tauri's Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+      - name: Format and lint
+        working-directory: app/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --tests -- -D warnings
+      - name: Unit tests (transcript merge, Hebrew search, summary parsing)
+        working-directory: app/src-tauri
+        run: cargo test
+
+  build:
+    name: Gatit.app (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Intel
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - name: Apple Silicon
+            runner: macos-15
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+          key: ${{ matrix.target }}
+      - name: Cache whisper.cpp build
+        uses: actions/cache@v4
+        with:
+          path: .build/whisper.cpp
+          key: whisper-cpp-${{ matrix.target }}-${{ hashFiles('scripts/build-whisper-mac.sh') }}
       - name: Build Swift recorder
-        run: scripts/build-recorder-mac.sh
+        run: scripts/build-recorder-mac.sh ${{ matrix.target }}
+      - name: Build whisper.cpp
+        run: scripts/build-whisper-mac.sh ${{ matrix.target }}
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Build app bundle
         working-directory: app/src-tauri
-        run: cargo tauri build --bundles app
+        run: cargo tauri build --target ${{ matrix.target }} --bundles app
       - name: Zip app (keeps executable permissions)
-        run: ditto -c -k --keepParent app/src-tauri/target/release/bundle/macos/Gatit.app Gatit-macos.zip
+        run: ditto -c -k --keepParent app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/Gatit.app Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Gatit-macos
-          path: Gatit-macos.zip
+          name: Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}
+          path: Gatit-macos-*.zip

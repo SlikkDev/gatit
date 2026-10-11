@@ -10,4 +10,7 @@ app/src-tauri/binaries/
 *.m4a
 *.wav
 recordings/
+*.sqlite
+# Whisper models are downloaded by the app, never committed.
+*.bin
 .DS_Store

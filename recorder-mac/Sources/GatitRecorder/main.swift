@@ -1,9 +1,10 @@
+import AppKit
 import Foundation
 
 // gatit-recorder --out <folder>
 //
 // Records the microphone to <folder>/mic.m4a and system audio to <folder>/system.m4a
-// until it reads "stop" on stdin or receives SIGINT/SIGTERM. Progress is reported to
+// until it reads "stop" on stdin, receives SIGINT/SIGTERM, or the Mac is about to sleep. Progress is reported to
 // stdout as one JSON object per line so the Gatit app can follow along.
 
 func emit(_ object: [String: Any]) {
@@ -29,14 +30,15 @@ let system = SystemAudioRecorder(levels: levels)
 var stopped = false
 let stopLock = NSLock()
 
-func stopAndExit() {
+func stopAndExit(reason: String = "user") {
     stopLock.lock()
     defer { stopLock.unlock() }
     guard !stopped else { return }
     stopped = true
+    // Stopping closes both files properly; an .m4a that is never closed can't be played.
     mic.stop()
     system.stop()
-    emit(["event": "stopped", "folder": folder.path])
+    emit(["event": "stopped", "folder": folder.path, "reason": reason])
     exit(0)
 }
 
@@ -75,6 +77,12 @@ for sig in [SIGINT, SIGTERM] {
     signalSources.append(source)
 }
 
+// Finish both files before the Mac sleeps, so a call left recording overnight is still
+// saved up to that point instead of being cut off mid-write.
+let sleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+    forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+) { _ in stopAndExit(reason: "sleep") }
+
 // Stop on "stop" from stdin, or when the parent app goes away and stdin closes.
 Thread.detachNewThread {
     while let line = readLine() {
@@ -83,4 +91,5 @@ Thread.detachNewThread {
     DispatchQueue.main.async { stopAndExit() }
 }
 
-dispatchMain()
+// The main run loop (rather than dispatchMain) also delivers the sleep notification.
+RunLoop.main.run()
