@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gatit</title>
+<meta name="description" content="Gatit records, transcribes and summarizes your Zoom, Google Meet and WhatsApp calls on your Mac, without a bot joining the call.">
+<meta property="og:title" content="Gatit">
+<meta property="og:description" content="Record, transcribe and summarize your calls. No bot in the meeting.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2320232a'/%3E%3Ccircle cx='32' cy='32' r='13' fill='%23e5484d'/%3E%3C/svg%3E">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfc;
+    --fg: #1b1d22;
+    --muted: #6f7280;
+    --line: rgba(27, 29, 34, 0.1);
+    --panel: #ffffff;
+    --panel-2: #f2f3f5;
+    --accent: #e5484d;
+    --accent-soft: rgba(229, 72, 77, 0.1);
+    --me: #2f6feb;
+    --them: #30a46c;
+    --mark: #20232a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 40px -12px rgba(27, 29, 34, 0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121317;
+      --fg: #ececf1;
+      --muted: #8b8d98;
+      --line: rgba(236, 236, 241, 0.1);
+      --panel: #1a1c22;
+      --panel-2: #22252d;
+      --accent-soft: rgba(229, 72, 77, 0.16);
+      --me: #6ea0ff;
+      --them: #4fcf8a;
+      --mark: #2a2d36;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: inherit; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 20px; }
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  h1 { font-size: clamp(34px, 6vw, 56px); line-height: 1.08; }
+  h2 { font-size: 28px; line-height: 1.2; }
+  h3 { font-size: 17px; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  code, kbd {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  kbd { border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; background: var(--panel-2); }
+  code { background: var(--panel-2); border-radius: 5px; padding: 1px 5px; }
+
+  header.top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0;
+  }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
+  .mark { width: 28px; height: 28px; border-radius: 8px; background: var(--mark); display: grid; place-items: center; }
+  .mark i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  nav a { text-decoration: none; color: var(--muted); margin-left: 22px; font-size: 15px; }
+  nav a:hover { color: var(--fg); }
+
+  .hero { padding: 72px 0 40px; text-align: center; }
+  .hero .mark { width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 28px; box-shadow: var(--shadow); }
+  .hero .mark i { width: 30px; height: 30px; }
+  .hero p.lead { font-size: 20px; max-width: 560px; margin: 18px auto 0; color: var(--muted); }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+
+  .downloads { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 36px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 22px; border-radius: 12px; text-decoration: none; font-weight: 600;
+    background: var(--fg); color: var(--bg); border: 1px solid transparent;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  .btn:hover { transform: translateY(-1px); opacity: 0.92; }
+  .btn.secondary { background: var(--panel); color: var(--fg); border-color: var(--line); box-shadow: var(--shadow); }
+  .btn small { display: block; font-weight: 400; font-size: 12px; opacity: 0.7; line-height: 1.2; }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn .label { text-align: left; line-height: 1.2; }
+  .fineprint { margin-top: 16px; font-size: 14px; color: var(--muted); }
+  .fineprint a { color: inherit; }
+  #build-info:empty { display: none; }
+
+  .demo {
+    margin: 56px auto 0; max-width: 680px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); overflow: hidden; text-align: left;
+  }
+  .demo .bar {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel-2); font-size: 13px; color: var(--muted);
+  }
+  .demo .rec { display: inline-flex; align-items: center; gap: 7px; color: var(--fg); font-weight: 600; }
+  .demo .rec i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .demo .bar time { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .lines { padding: 18px 20px 6px; display: grid; gap: 12px; }
+  .line { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: baseline; }
+  .line .who { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .line.me .who { color: var(--me); }
+  .line.them .who { color: var(--them); }
+  .line .what { font-size: 15px; }
+  .line .what[dir="rtl"] { text-align: right; }
+  .line .what b { font-weight: 500; color: var(--fg); background: var(--accent-soft); border-radius: 4px; padding: 0 4px; }
+  .summary { margin: 10px 20px 20px; padding: 14px 16px; border-radius: 10px; background: var(--panel-2); font-size: 14px; }
+  .summary .k { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .summary ul { margin: 0; padding-left: 18px; }
+  .summary li + li { margin-top: 3px; }
+
+  section { padding: 72px 0 0; }
+  section > .wrap > h2 { margin-bottom: 8px; }
+  section > .wrap > p.sub { color: var(--muted); max-width: 600px; margin-bottom: 32px; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px;
+  }
+  .card .n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 13px; margin-bottom: 14px; }
+  .card h3 { margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 15px; }
+
+  .steps { counter-reset: s; display: grid; gap: 14px; max-width: 680px; }
+  .step { display: grid; grid-template-columns: 32px 1fr; gap: 14px; align-items: start; }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; font-weight: 600;
+  }
+  .step h3 { margin-bottom: 4px; }
+  .step p { color: var(--muted); font-size: 15px; }
+  details { max-width: 680px; margin-top: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  summary { cursor: pointer; padding: 14px 18px; font-weight: 600; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; float: right; color: var(--muted); }
+  details[open] summary::after { content: "–"; }
+  details .body { padding: 0 18px 16px; color: var(--muted); font-size: 15px; }
+  details .body p + p { margin-top: 10px; }
+
+  .privacy { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; max-width: 760px; }
+  .privacy div { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; color: var(--muted); font-size: 15px; }
+  .privacy svg { width: 20px; height: 20px; color: var(--them); margin-top: 2px; }
+  .privacy b { color: var(--fg); font-weight: 600; }
+
+  footer { margin-top: 96px; padding: 28px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+  footer a { text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 600px) {
+    nav a { margin-left: 14px; font-size: 14px; }
+    .hero { padding-top: 48px; }
+    .btn { width: 100%; justify-content: center; }
+    .grid, .privacy { grid-template-columns: 1fr; }
+    .line { grid-template-columns: 1fr; gap: 2px; }
+    section { padding-top: 56px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .demo .rec i { animation: none; }
+    .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><span class="mark"><i></i></span>Gatit</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="https://github.com/SlikkDev/gatit">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <span class="mark"><i></i></span>
+      <h1>Your calls, transcribed and summarized.<br><em>No bot in the meeting.</em></h1>
+      <p class="lead">Gatit records Zoom, Google Meet and WhatsApp calls straight from your Mac's audio, transcribes them on the machine, and writes a summary in English.</p>
+
+      <div class="downloads">
+        <a class="btn" id="dl-arm" href="https://github.com/SlikkDev/gatit/releases/latest/download/Gatit-macos-apple-silicon.zip">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.19-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.63 1.11 8.8.73 1.06 1.6 2.25 2.75 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.67-2.15.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.33-3.55zM14.2 6.13c.61-.74 1.02-1.76.9-2.78-.88.04-1.94.58-2.57 1.32-.56.65-1.06 1.7-.93 2.7.98.08 1.98-.5 2.6-1.24z"/></svg>
+          <span class="label">Download for Mac<small>Apple Silicon (M1 or later)</small></span>
+        </a>
+        <a class="btn secondary" id="dl-intel" href="https://github.com/SlikkDev/gatit/releases/latest/download/Gatit-macos-intel.zip">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.19-1.73-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.63 1.11 8.8.73 1.06 1.6 2.25 2.75 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.67-2.15.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.32-.89-2.33-3.55zM14.2 6.13c.61-.74 1.02-1.76.9-2.78-.88.04-1.94.58-2.57 1.32-.56.65-1.06 1.7-.93 2.7.98.08 1.98-.5 2.6-1.24z"/></svg>
+          <span class="label">Download for Mac<small>Intel</small></span>
+        </a>
+      </div>
+      <p class="fineprint">macOS 14.2 or later. Not sure which Mac you have? Apple menu → About This Mac shows the chip. <span id="build-info"></span></p>
+      <p class="fineprint">Windows is in the works. <a href="https://github.com/SlikkDev/gatit">Follow along on GitHub.</a></p>
+
+      <div class="demo" aria-label="Example transcript">
+        <div class="bar">
+          <span class="rec"><i></i>Recording</span>
+          <span>Zoom · Weekly sync</span>
+          <time>12:48</time>
+        </div>
+        <div class="lines">
+          <div class="line me"><span class="who">Me</span><span class="what" dir="rtl" lang="he">אז על ה-<b>landing page</b> החדש, ה-<b>CRO</b> עלה בעשרה אחוז.</span></div>
+          <div class="line them"><span class="who">Dana</span><span class="what" dir="rtl" lang="he">מעולה. ה-<b>ROI</b> על הקמפיין ב-<b>LinkedIn</b> עדיין נמוך, נדבר על זה בפגישה הבאה.</span></div>
+          <div class="line me"><span class="who">Me</span><span class="what" dir="rtl" lang="he">סגור, אני אשלח <b>KPI</b>-ים מעודכנים עד יום חמישי.</span></div>
+        </div>
+        <div class="summary">
+          <div class="k">Summary</div>
+          <ul>
+            <li>New landing page lifted conversion rate by 10%.</li>
+            <li><b>Decision:</b> revisit the LinkedIn campaign's ROI next meeting.</li>
+            <li><b>Action (me):</b> send updated KPIs by Thursday.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="wrap" style="padding:0">
+        <h2>How it works</h2>
+        <p class="sub">Everything happens on your Mac. Only the transcript text goes to Claude, for the summary.</p>
+        <div class="grid">
+          <div class="card">
+            <span class="n">1</span>
+            <h3>Record</h3>
+            <p>When Zoom, WhatsApp or your browser starts using the microphone, a small "Record this call?" pop-up appears. Or press <kbd>⌃⌥⌘R</kbd>. Your mic is saved as "Me" and the Mac's audio as "Them", so the transcript knows who said what without any speaker-detection AI. The call window is captured as video too.</p>
+          </div>
+          <div class="card">
+            <span class="n">2</span>
+            <h3>Transcribe, on the machine</h3>
+            <p>whisper.cpp with ivrit.ai's Hebrew model, locally. Hebrew calls keep their English jargon in English letters: CRO, ROI, KPI, landing page and about 200 more, plus your own terms. English-only calls use the stock English model. Audio never leaves your Mac.</p>
+          </div>
+          <div class="card">
+            <span class="n">3</span>
+            <h3>Summarize with Claude</h3>
+            <p>A title, overview, who was on the call, key points, decisions, action items by name and open questions. Always in English, even for Hebrew calls. Your API key lives in the macOS Keychain.</p>
+          </div>
+          <div class="card">
+            <span class="n">4</span>
+            <h3>Find it again</h3>
+            <p>All calls in one library, grouped by day, with search across every transcript and summary. Hebrew search matches words with or without prefix letters. Click a line to hear that moment. Export any call as Markdown, or have every call land in your Google Drive.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap" style="padding:0">
+        <h2>First launch</h2>
+        <p class="sub">Gatit is signed ad hoc, not with an Apple developer certificate, so macOS asks once before opening it.</p>
+        <div class="steps">
+          <div class="step"><div><h3>Unzip and drag Gatit into Applications</h3><p>Then double-click it. macOS will show a warning: that's expected.</p></div></div>
+          <div class="step"><div><h3>Allow it, once</h3><p><b>macOS 15:</b> click Done, open System Settings → Privacy &amp; Security, scroll to the line about Gatit, click <b>Open Anyway</b>, then Open. <b>macOS 14:</b> Control-click Gatit → Open → Open.</p></div></div>
+          <div class="step"><div><h3>Grant the permissions on your first recording</h3><p>Microphone and System Audio Recording. With video on, also Screen &amp; System Audio Recording. Until that one is allowed, calls are recorded as audio only.</p></div></div>
+        </div>
+        <details>
+          <summary>macOS says Gatit is "damaged and can't be opened"</summary>
+          <div class="body">
+            <p>The download was quarantined before macOS checked its signature. Clear the flag and open it again:</p>
+            <p><code>xattr -cr /Applications/Gatit.app</code></p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section id="privacy">
+      <div class="wrap" style="padding:0">
+        <h2>Privacy</h2>
+        <p class="sub">Built for personal use, and open source so you can check.</p>
+        <div class="privacy">
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><p><b>No bot joins the call.</b> Nobody on the other side sees an extra participant.</p></div>
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><p><b>Audio stays on your Mac.</b> Transcription is local. Only the transcript text is sent to Claude.</p></div>
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><p><b>Plain files.</b> Each call is a folder of audio, video, transcript and summary files under Application Support. No lock-in.</p></div>
+          <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><p><b>Keys in the Keychain.</b> Your Claude API key and Google sign-in are stored by macOS, not in a config file.</p></div>
+        </div>
+        <p class="sub" style="margin-top:28px">Some places require telling the other people on a call that you are recording.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>Gatit is open source.</span>
+    <span>
+      <a href="https://github.com/SlikkDev/gatit">Source</a> ·
+      <a href="https://github.com/SlikkDev/gatit/releases/latest">Latest build</a> ·
+      <a href="https://github.com/SlikkDev/gatit/blob/main/docs/google-drive.md">Google Drive setup</a> ·
+      <a href="https://github.com/SlikkDev/gatit/issues">Issues</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+  // Show when the latest build was published. Quietly skips if the API is unreachable.
+  fetch("https://api.github.com/repos/SlikkDev/gatit/releases/tags/latest", { headers: { Accept: "application/vnd.github+json" } })
+    .then(r => r.ok ? r.json() : null)
+    .then(rel => {
+      if (!rel || !rel.published_at) return;
+      const when = new Date(rel.published_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      document.getElementById("build-info").textContent = "Latest build: " + when + ".";
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>
