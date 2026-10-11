@@ -544,7 +544,7 @@ mod tests {
         })
         .unwrap();
         lib.refresh(&m.id).unwrap();
-        lib.set_your_name("Yarin").unwrap();
+        lib.set_your_name("Noa").unwrap();
         assert!(md().contains("with Dana Cohen"));
         assert!(md().contains("Dana Cohen: שלום"));
         assert_eq!(

@@ -295,15 +295,15 @@ mod tests {
             seg(Speaker::Me, 0.0, 1.0, "hi"),
             seg(Speaker::Them, 2.0, 3.0, "hey"),
         ];
-        let one = Names::new("Yarin", &["Dana Cohen".into()]);
+        let one = Names::new("Noa", &["Dana Cohen".into()]);
         assert_eq!(
             to_text(&lines, &one),
-            "[00:00] Yarin: hi\n[00:02] Dana Cohen: hey"
+            "[00:00] Noa: hi\n[00:02] Dana Cohen: hey"
         );
 
         // Several people share the other track, so it stays "Them".
-        let group = Names::new(" Yarin ", &["Dana".into(), "Avi".into()]);
-        assert_eq!((group.me.as_str(), group.them.as_str()), ("Yarin", "Them"));
+        let group = Names::new(" Noa ", &["Dana".into(), "Avi".into()]);
+        assert_eq!((group.me.as_str(), group.them.as_str()), ("Noa", "Them"));
 
         // Blank entries don't count as people.
         let blank = Names::new("", &["  ".into(), "Dana".into()]);
