@@ -43,6 +43,8 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.95em; }
 .meter { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .meter div { height: 100%; width: 0; background: var(--green); transition: width 0.2s; }
 .notice { margin: 4px 14px; padding: 8px 10px; border-radius: 8px; background: rgba(229, 72, 77, 0.12); color: var(--accent); font-size: 13px; }
+.update { margin: 4px 14px; padding: 8px 10px; border-radius: 8px; background: rgba(48, 164, 108, 0.12); font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.update button { color: var(--green); font-weight: 600; padding: 0; }
 #search { margin: 8px 14px; }
 #meetings { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
 #meetings h4 { margin: 12px 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }

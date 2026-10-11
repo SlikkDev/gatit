@@ -40,7 +40,9 @@ The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/ga
 - **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip (M1 or later).
 - **Gatit-macos-intel.zip** for an Intel Mac, such as a 2019 MacBook Pro.
 
-Unzip it and drag `Gatit.app` into Applications. The app carries only an ad-hoc signature (no Apple developer certificate, no notarization), so macOS blocks the first launch:
+Unzip it and drag `Gatit.app` into Applications. From then on Gatit updates itself: it checks the latest release every few hours, installs a newer build in the background and shows a **Restart** button (in the window and in the menu bar) when one is ready; it never restarts during a recording.
+
+The release notes say whether the build is signed with an Apple Developer ID and notarized (then it opens like any other app) or only ad-hoc signed. [docs/signing.md](docs/signing.md) explains how to turn signing and notarization on. An ad-hoc build is blocked on the first launch:
 
 - **macOS 15 (Sequoia):** double-click Gatit and click **Done** on the warning. Open System Settings → Privacy & Security, scroll down to the line about Gatit and click **Open Anyway**, then **Open** on the next warning.
 - **macOS 14 (Sonoma):** Control-click (right-click) Gatit → **Open** → **Open**.
@@ -79,10 +81,11 @@ In development the permission prompts name your terminal app instead of Gatit.
   - `summary.rs` calls the Claude API with a structured-output schema. The instructions are in `prompts/summary.md`; "Edit the summary instructions" in Settings gives you an editable copy.
   - `library.rs` is the meetings folder plus the SQLite full-text index (trigram tokenizer, for Hebrew prefixes).
   - `jobs.rs` runs transcription and summaries one at a time in the background and resumes unfinished work on launch.
+  - `updater.rs` checks the latest release for a newer build, installs it and asks for a restart.
   - `drive.rs` signs in to Google (OAuth with PKCE, loopback redirect) and mirrors each meeting folder to Drive, one meeting at a time, retrying failures.
   - `models.json` lists the model downloads.
 - `app/ui/`: the window, plain HTML and JavaScript.
-- `scripts/`: builds for the Swift recorder and whisper.cpp.
+- `scripts/`: builds for the Swift recorder and whisper.cpp, and the `ci-*.sh` helpers the GitHub Actions workflow uses to pick the signing identity, collect the downloads and write the update feed ([docs/signing.md](docs/signing.md)).
 
 ## License
 

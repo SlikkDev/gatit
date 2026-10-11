@@ -14,7 +14,7 @@ use crate::state::{library_changed, state, Job};
 use crate::summary::Summary;
 use crate::transcribe::{self, Model};
 use crate::transcript::{Names, Transcript};
-use crate::{jobs, recorder};
+use crate::{jobs, recorder, updater};
 
 #[derive(Serialize)]
 pub struct AppStatus {
@@ -27,6 +27,9 @@ pub struct AppStatus {
     macos: Option<String>,
     arch: &'static str,
     has_api_key: bool,
+    version: String,
+    /// A newer build already installed on disk, waiting for a restart.
+    update_ready: Option<String>,
 }
 
 #[tauri::command]
@@ -52,7 +55,14 @@ pub fn app_status(app: AppHandle) -> AppStatus {
         macos: recorder::macos_version().map(|v| v.2),
         arch: std::env::consts::ARCH,
         has_api_key: settings::api_key().is_some(),
+        version: app.package_info().version.to_string(),
+        update_ready: updater::ready_version(),
     }
+}
+
+#[tauri::command]
+pub fn restart_to_update(app: AppHandle) -> Result<(), String> {
+    updater::restart(&app)
 }
 
 #[tauri::command]
