@@ -296,12 +296,12 @@ mod tests {
         assert!(unknown.contains("Everyone else on the call is labelled \"Them\""));
 
         let m = meeting(&["Dana Cohen"]);
-        let one = summary_context(&m, &Names::new("Yarin", &m.participants));
-        assert!(one.contains("recorded by Yarin, labelled \"Yarin\""));
+        let one = summary_context(&m, &Names::new("Noa", &m.participants));
+        assert!(one.contains("recorded by Noa, labelled \"Noa\""));
         assert!(one.contains("The other person on the call is Dana Cohen, labelled \"Dana Cohen\""));
 
         let m = meeting(&["Dana", "Avi"]);
-        let group = summary_context(&m, &Names::new("Yarin", &m.participants));
+        let group = summary_context(&m, &Names::new("Noa", &m.participants));
         assert!(group
             .contains("The other people on the call are Dana, Avi; they share the label \"Them\""));
     }

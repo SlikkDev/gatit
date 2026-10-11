@@ -7,6 +7,8 @@ mod drive;
 mod hints;
 mod jobs;
 mod library;
+#[cfg(target_os = "macos")]
+mod panel;
 mod recorder;
 mod settings;
 mod state;

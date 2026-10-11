@@ -1,5 +1,6 @@
 // The "Record this call?" pop-up. It closes itself after a while if ignored, and pauses that
-// countdown while the pointer is over it.
+// countdown while the pointer is over it. It never takes keyboard focus (typing keeps going to
+// the call), so it has no key shortcuts: click Record or Not now.
 const { invoke } = window.__TAURI__.core;
 
 const $ = (id) => document.getElementById(id);
@@ -40,10 +41,6 @@ $("record").addEventListener("click", () => answer(true));
 $("dismiss").addEventListener("click", () => answer(false));
 $("card").addEventListener("mouseenter", () => (hovering = true));
 $("card").addEventListener("mouseleave", () => (hovering = false));
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") answer(true);
-  if (e.key === "Escape") answer(false);
-});
 
 window.loadCall();
 tick();

@@ -1002,7 +1002,7 @@ mod tests {
 
     #[test]
     fn search_queries_escape_quotes() {
-        assert_eq!(q_escape("Yarin's call"), "Yarin\\'s call");
+        assert_eq!(q_escape("Noa's call"), "Noa\\'s call");
     }
 
     #[test]
