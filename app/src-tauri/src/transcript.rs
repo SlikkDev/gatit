@@ -241,16 +241,58 @@ pub fn timestamp(seconds: f64) -> String {
     }
 }
 
+/// What each track is called in transcripts: the user's own name instead of "Me" once they
+/// set it, and the other person's name instead of "Them" when exactly one other
+/// participant is known. On a group call the other side stays "Them", because everyone
+/// else shares one audio track and nothing tells their voices apart.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Names {
+    pub me: String,
+    pub them: String,
+}
+
+impl Default for Names {
+    fn default() -> Self {
+        Self::new("", &[])
+    }
+}
+
+impl Names {
+    pub fn new(your_name: &str, participants: &[String]) -> Self {
+        let me = your_name.trim();
+        let others: Vec<&str> = participants
+            .iter()
+            .map(|p| p.trim())
+            .filter(|p| !p.is_empty())
+            .collect();
+        Self {
+            me: if me.is_empty() { "Me" } else { me }.to_string(),
+            them: match others.as_slice() {
+                [only] => only.to_string(),
+                _ => "Them".to_string(),
+            },
+        }
+    }
+
+    pub fn label(&self, speaker: Speaker) -> &str {
+        match speaker {
+            Speaker::Me => &self.me,
+            Speaker::Them => &self.them,
+        }
+    }
+}
+
 /// Plain-text transcript, one line per turn, used for the summary prompt and exports.
-pub fn to_text(segments: &[Segment]) -> String {
+pub fn to_text(segments: &[Segment], names: &Names) -> String {
     segments
         .iter()
         .map(|s| {
-            let who = match s.speaker {
-                Speaker::Me => "Me",
-                Speaker::Them => "Them",
-            };
-            format!("[{}] {}: {}", timestamp(s.start), who, s.text)
+            format!(
+                "[{}] {}: {}",
+                timestamp(s.start),
+                names.label(s.speaker),
+                s.text
+            )
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -360,10 +402,34 @@ mod tests {
 
     #[test]
     fn formats_text_transcript() {
-        let text = to_text(&[
-            seg(Speaker::Me, 65.0, 70.0, "hi"),
-            seg(Speaker::Them, 3700.0, 3701.0, "bye"),
-        ]);
+        let text = to_text(
+            &[
+                seg(Speaker::Me, 65.0, 70.0, "hi"),
+                seg(Speaker::Them, 3700.0, 3701.0, "bye"),
+            ],
+            &Names::default(),
+        );
         assert_eq!(text, "[01:05] Me: hi\n[1:01:40] Them: bye");
+    }
+
+    #[test]
+    fn names_the_tracks_when_people_are_known() {
+        let lines = [
+            seg(Speaker::Me, 0.0, 1.0, "hi"),
+            seg(Speaker::Them, 2.0, 3.0, "hey"),
+        ];
+        let one = Names::new("Yarin", &["Dana Cohen".into()]);
+        assert_eq!(
+            to_text(&lines, &one),
+            "[00:00] Yarin: hi\n[00:02] Dana Cohen: hey"
+        );
+
+        // Several people share the other track, so it stays "Them".
+        let group = Names::new(" Yarin ", &["Dana".into(), "Avi".into()]);
+        assert_eq!((group.me.as_str(), group.them.as_str()), ("Yarin", "Them"));
+
+        // Blank entries don't count as people.
+        let blank = Names::new("", &["  ".into(), "Dana".into()]);
+        assert_eq!((blank.me.as_str(), blank.them.as_str()), ("Me", "Dana"));
     }
 }

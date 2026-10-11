@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+use crate::hints;
 use crate::library::{default_title, Status};
 use crate::state::{library_changed, state, Job};
 
@@ -43,7 +44,8 @@ pub fn recording_blocker() -> Option<String> {
 }
 
 /// Best guess at which call app is in use, from what's running. Meet runs in a browser and
-/// can't be told apart this way, so it's left blank to be set by hand.
+/// can't be told apart this way; the recorder's look at the open windows (`hints`) fills
+/// that in when it can, and otherwise it's left blank to be set by hand.
 fn detect_call_app() -> String {
     #[cfg(target_os = "macos")]
     if let Ok(out) = std::process::Command::new("/bin/ps")
@@ -124,12 +126,15 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                             rec.started = Some(std::time::Instant::now());
                             rec.started_at_ms = Some(Local::now().timestamp_millis());
                         }
+                        Some("windows") => apply_hints(&app, &id, &value["windows"]),
                         Some("error") => last_error = value["message"].as_str().map(String::from),
-                        Some("video") => {
-                            if let Some(name) = value["app"].as_str() {
-                                set_source_app(&app, &id, name);
-                            }
-                        }
+                        // The call window the video recorder found, possibly after the call
+                        // started: it names the app and sometimes the person, like the list above.
+                        Some("video") => apply_hints(
+                            &app,
+                            &id,
+                            &json!([{ "app": value["app"], "title": value["window"] }]),
+                        ),
                         _ => {}
                     }
                     let _ = app.emit("recorder", value);
@@ -147,23 +152,6 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         finished(&app, &id, last_error);
     });
     Ok(())
-}
-
-/// Fills in the call app from the window being recorded (the only way to tell it's Meet),
-/// unless it's already known.
-fn set_source_app(app: &AppHandle, id: &str, name: &str) {
-    let st = state(app);
-    let updated = st.library().update(id, |m| {
-        if m.source_app.is_empty() {
-            m.source_app = name.to_string();
-            if !m.title_edited {
-                m.title = default_title(&m.started_at, name);
-            }
-        }
-    });
-    if updated.is_ok() {
-        library_changed(app, id);
-    }
 }
 
 /// Combines a recording's screen.mp4 with its audio into video.mp4 (see `muxVideo` in the
@@ -191,6 +179,31 @@ pub fn combine_video(app: &AppHandle, id: &str) {
             Err(e) => eprintln!("gatit-recorder --mux: {e}"),
         }
     });
+}
+
+/// Fills in the call app and the people on the call from the windows the recorder saw open,
+/// where the meeting doesn't already say.
+fn apply_hints(app: &AppHandle, id: &str, windows: &Value) {
+    let Ok(windows) = serde_json::from_value::<Vec<hints::Window>>(windows.clone()) else {
+        return;
+    };
+    let st = state(app);
+    let hints = hints::from_windows(&windows, &st.settings().your_name);
+    if hints == hints::CallHints::default() {
+        return;
+    }
+    let _ = st.library().update(id, |m| {
+        if let Some(source_app) = hints.source_app.filter(|_| m.source_app.is_empty()) {
+            m.source_app = source_app;
+            if !m.title_edited {
+                m.title = default_title(&m.started_at, &m.source_app);
+            }
+        }
+        if !m.participants_edited {
+            m.add_participants(hints.participants.iter().map(String::as_str));
+        }
+    });
+    library_changed(app, id);
 }
 
 /// Called when the recorder process exits, however it stopped.

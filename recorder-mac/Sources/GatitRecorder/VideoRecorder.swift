@@ -53,9 +53,8 @@ final class VideoRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
     private func attachToCallWindow() async {
         guard let content = try? await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true),
-              let match = Self.callWindow(in: content.windows)
+              let window = Self.callWindow(in: content.windows)
         else { return }
-        let (window, app) = match
 
         let config = SCStreamConfiguration()
         // The output size is fixed by the first window so later windows continue the same file.
@@ -89,7 +88,9 @@ final class VideoRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
             }
             guard attached else { return }
             try await stream.startCapture()
-            emit(["event": "video", "app": app, "window": window.title ?? ""])
+            // Named the way CallWindows names apps, so the app reads it with the same hints.
+            emit(["event": "video", "app": window.owningApplication?.applicationName ?? "",
+                  "window": window.title ?? ""])
         } catch {
             queue.sync { if self.stream === stream { self.stream = nil } }
             emit(["event": "notice", "message": "Couldn't record the call's video: \(error.localizedDescription)"])
@@ -97,27 +98,27 @@ final class VideoRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     /// Picks the window most likely to be the call: a Zoom meeting, a Google Meet tab, or a
-    /// WhatsApp window (preferring its call window). Ties go to the biggest window.
-    static func callWindow(in windows: [SCWindow]) -> (SCWindow, String)? {
+    /// WhatsApp window (preferring a call window, which is titled after the contact). Ties go
+    /// to the biggest window.
+    static func callWindow(in windows: [SCWindow]) -> SCWindow? {
         let browsers = ["com.google.Chrome", "com.apple.Safari", "company.thebrowser.Browser",
                         "com.microsoft.edgemac", "com.brave.Browser", "org.mozilla.firefox",
                         "com.vivaldi.Vivaldi", "com.operasoftware.Opera"]
-        var best: (window: SCWindow, app: String, score: Int)?
+        var best: (window: SCWindow, score: Int)?
         for window in windows where window.windowLayer == 0 && window.frame.width >= 320 && window.frame.height >= 200 {
             guard let bundle = window.owningApplication?.bundleIdentifier else { continue }
             let title = window.title ?? ""
             let lower = title.lowercased()
-            var app = ""
             var score = 0
             if bundle == "us.zoom.xos" {
-                app = "Zoom"
-                if lower.contains("zoom meeting") || lower.contains("webinar") { score = 3 }
+                // "Zoom Meeting", "Dana's Personal Meeting Room", a webinar; not Zoom's main window.
+                if lower.contains("meeting") || lower.contains("webinar") { score = 3 }
             } else if browsers.contains(where: { bundle.hasPrefix($0) }) {
-                app = "Google Meet"
-                if lower.hasPrefix("meet -") || lower.hasPrefix("meet –") || lower.contains("google meet") { score = 3 }
+                if ["meet - ", "meet – ", "meet — "].contains(where: { lower.hasPrefix($0) }) || lower.contains("google meet") {
+                    score = 3
+                }
             } else if bundle.hasPrefix("net.whatsapp.WhatsApp") || bundle == "desktop.WhatsApp" {
-                app = "WhatsApp"
-                score = (lower.contains("call") || title.contains("שיחה")) ? 3 : 1
+                score = (title.isEmpty || title.contains("WhatsApp")) ? 1 : 3
             }
             guard score > 0 else { continue }
             let area = window.frame.width * window.frame.height
@@ -125,9 +126,9 @@ final class VideoRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
                 let currentArea = current.window.frame.width * current.window.frame.height
                 if score < current.score || (score == current.score && area <= currentArea) { continue }
             }
-            best = (window, app, score)
+            best = (window, score)
         }
-        return best.map { ($0.window, $0.app) }
+        return best?.window
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {

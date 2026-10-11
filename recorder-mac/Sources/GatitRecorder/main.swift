@@ -72,6 +72,8 @@ Task {
         try system.start(writingTo: folder.appendingPathComponent("system.m4a"))
         try mic.start(writingTo: folder.appendingPathComponent("mic.m4a"))
         emit(["event": "started", "folder": folder.path])
+        // Which app the call is in, and who is on it, as far as the open windows tell.
+        emit(["event": "windows", "windows": CallWindows.list()])
         if arguments.contains("--video") {
             stopLock.withLock {
                 guard !stopped else { return }
