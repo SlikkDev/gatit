@@ -340,3 +340,9 @@ pub fn open_summary_prompt(app: AppHandle) -> Result<(), String> {
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
+
+/// The built-in Hebrew-English terms, grouped, for Settings to show.
+#[tauri::command]
+pub fn builtin_vocabulary() -> Vec<crate::vocabulary::BuiltinGroupInfo> {
+    crate::vocabulary::builtin_groups()
+}

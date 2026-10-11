@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::transcript::{default_vocabulary, VocabTerm};
+use crate::vocabulary::{self, VocabTerm};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -22,6 +22,9 @@ pub struct Settings {
     pub transcribe_when: String,
     pub auto_summarize: bool,
     pub claude_model: String,
+    /// Use the built-in list of English terms Israelis say in Hebrew.
+    pub builtin_vocabulary: bool,
+    /// The user's own terms, on top of the built-in list.
     pub vocabulary: Vec<VocabTerm>,
 }
 
@@ -40,7 +43,8 @@ impl Default for Settings {
             transcribe_when: "now".into(),
             auto_summarize: true,
             claude_model: crate::summary::DEFAULT_MODEL.into(),
-            vocabulary: default_vocabulary(),
+            builtin_vocabulary: true,
+            vocabulary: Vec::new(),
         }
     }
 }
@@ -54,10 +58,15 @@ pub fn default_shortcut() -> &'static str {
 }
 
 pub fn load(path: &Path) -> Settings {
-    std::fs::read(path)
+    let mut settings: Settings = std::fs::read(path)
         .ok()
         .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // v1 saved its four default terms as the user's list; they are built in now.
+    if vocabulary::is_v1_default(&settings.vocabulary) {
+        settings.vocabulary.clear();
+    }
+    settings
 }
 
 pub fn save(path: &Path, settings: &Settings) -> Result<(), String> {
@@ -105,6 +114,7 @@ mod tests {
         assert_eq!(s.default_language, "en");
         assert_eq!(s.your_name, "");
         assert_eq!(s.transcribe_when, "now");
-        assert_eq!(s.vocabulary.len(), 4);
+        assert!(s.builtin_vocabulary);
+        assert!(s.vocabulary.is_empty());
     }
 }

@@ -11,6 +11,7 @@ mod state;
 mod summary;
 mod transcribe;
 mod transcript;
+mod vocabulary;
 
 use std::collections::HashSet;
 use std::sync::Mutex;
@@ -138,6 +139,7 @@ fn main() {
             commands::model_status,
             commands::download_model,
             commands::open_summary_prompt,
+            commands::builtin_vocabulary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Gatit");

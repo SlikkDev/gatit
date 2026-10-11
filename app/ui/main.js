@@ -460,7 +460,9 @@ async function openSettings() {
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
   $("s-when").value = s.transcribe_when;
+  $("s-builtin-vocab").checked = s.builtin_vocabulary;
   $("s-vocab").value = vocabToText(s.vocabulary);
+  await renderBuiltinVocabulary();
   $("s-auto").checked = s.auto_summarize;
   $("s-claude-model").value = s.claude_model;
   $("s-key").value = "";
@@ -475,6 +477,17 @@ async function openSettings() {
   $("empty").hidden = true;
   $("detail").hidden = true;
   $("settings").hidden = false;
+}
+
+async function renderBuiltinVocabulary() {
+  const box = $("builtin-vocab");
+  if (box.childElementCount) return;
+  const groups = await invoke("builtin_vocabulary");
+  const count = groups.reduce((n, g) => n + g.terms.length, 0);
+  $("builtin-vocab-summary").textContent = `See the ${count} built-in terms`;
+  for (const g of groups) {
+    box.append(el("p", {}, [el("strong", { text: `${g.name}: ` }), g.terms.join(", ")]));
+  }
 }
 
 async function renderModels() {
@@ -514,6 +527,7 @@ $("save-settings").addEventListener("click", async () => {
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,
     transcribe_when: $("s-when").value,
+    builtin_vocabulary: $("s-builtin-vocab").checked,
     vocabulary: textToVocab($("s-vocab").value),
     auto_summarize: $("s-auto").checked,
     claude_model: $("s-claude-model").value.trim() || state.settings.claude_model,

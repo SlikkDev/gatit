@@ -16,7 +16,8 @@ use tauri_plugin_shell::ShellExt;
 use tokio::io::AsyncWriteExt;
 
 use crate::settings::Settings;
-use crate::transcript::{self, Speaker, Transcript, VocabFixer};
+use crate::transcript::{self, Speaker, Transcript};
+use crate::vocabulary::Vocabulary;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ModelInfo {
@@ -407,8 +408,9 @@ pub async fn transcribe_meeting(
         wavs.push((*speaker, to_wav(track, &wav).await?));
     }
 
-    let prompt = transcript::whisper_prompt(&settings.vocabulary);
-    let fixer = VocabFixer::new(&settings.vocabulary);
+    let vocabulary = Vocabulary::new(&settings.vocabulary, settings.builtin_vocabulary);
+    let prompt = vocabulary.whisper_prompt();
+    let fixer = vocabulary.fixer();
     let mut detected = String::new();
     let mut results: Vec<(Speaker, Vec<transcript::Segment>)> = Vec::new();
     let mut i = 0;

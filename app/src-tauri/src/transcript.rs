@@ -2,7 +2,6 @@
 //!
 //! Everything here is pure so it can be unit-tested without audio or a model.
 
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,15 +25,6 @@ pub struct Transcript {
     pub language: String,
     pub model: String,
     pub segments: Vec<Segment>,
-}
-
-/// One user vocabulary entry: the spelling to keep (usually English letters) and the
-/// ways Whisper tends to write it in Hebrew letters instead.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct VocabTerm {
-    pub term: String,
-    #[serde(default)]
-    pub variants: Vec<String>,
 }
 
 /// Parses the JSON that `whisper-cli -oj` writes into segments for one speaker.
@@ -135,100 +125,6 @@ pub fn similarity(a: &str, b: &str) -> f64 {
         }
     }
     2.0 * shared as f64 / total as f64
-}
-
-/// The initial prompt passed to Whisper. Written in Hebrew so the model stays in Hebrew,
-/// while listing the terms that should come out in English letters.
-pub fn whisper_prompt(vocabulary: &[VocabTerm]) -> String {
-    let terms: Vec<&str> = vocabulary
-        .iter()
-        .map(|v| v.term.as_str())
-        .filter(|t| !t.is_empty())
-        .collect();
-    if terms.is_empty() {
-        return String::new();
-    }
-    format!("שיחת עבודה בעברית עם מונחים באנגלית: {}.", terms.join(", "))
-}
-
-/// Builds the cleanup pass that rewrites Hebrew-letter spellings of known terms
-/// (for example "סי אר או") into the term itself ("CRO").
-pub struct VocabFixer {
-    rules: Vec<(Regex, String)>,
-}
-
-/// Hebrew one-letter prefixes (and, the, in, to, from, that, as) that attach to words.
-const PREFIXES: &str = "והבלמשכ";
-
-impl VocabFixer {
-    pub fn new(vocabulary: &[VocabTerm]) -> Self {
-        let mut rules = Vec::new();
-        for entry in vocabulary {
-            let term = entry.term.trim();
-            if term.is_empty() {
-                continue;
-            }
-            let mut variants: Vec<&str> = entry
-                .variants
-                .iter()
-                .map(|v| v.trim())
-                .filter(|v| !v.is_empty())
-                .collect();
-            // Longest first, so "פרופיט שייר" wins over "פרופיט".
-            variants.sort_by_key(|v| std::cmp::Reverse(v.chars().count()));
-            for variant in variants {
-                // Whisper sometimes inserts dots or hyphens between letters: "סי.אר.או".
-                let body = variant
-                    .split_whitespace()
-                    .map(regex::escape)
-                    .collect::<Vec<_>>()
-                    .join(r"[\s.\-]*");
-                let pattern = format!(
-                    r"(^|[^\p{{L}}\p{{N}}])([{PREFIXES}]{{0,2}})-?{body}([^\p{{L}}\p{{N}}]|$)"
-                );
-                if let Ok(re) = Regex::new(&pattern) {
-                    rules.push((re, term.to_string()));
-                }
-            }
-        }
-        Self { rules }
-    }
-
-    pub fn apply(&self, text: &str) -> String {
-        let mut out = text.to_string();
-        for (re, term) in &self.rules {
-            // Each match consumes its trailing boundary, so repeat until stable to catch
-            // back-to-back occurrences.
-            loop {
-                let next = re
-                    .replace_all(&out, |caps: &regex::Captures| {
-                        let prefix = &caps[2];
-                        let joiner = if prefix.is_empty() { "" } else { "-" };
-                        format!("{}{}{}{}{}", &caps[1], prefix, joiner, term, &caps[3])
-                    })
-                    .into_owned();
-                if next == out {
-                    break;
-                }
-                out = next;
-            }
-        }
-        out
-    }
-}
-
-/// Default vocabulary from the plan: terms that come up in Yarin-style business calls.
-pub fn default_vocabulary() -> Vec<VocabTerm> {
-    let v = |term: &str, variants: &[&str]| VocabTerm {
-        term: term.into(),
-        variants: variants.iter().map(|s| s.to_string()).collect(),
-    };
-    vec![
-        v("CRO", &["סי אר או", "סיאראו", "סי.אר.או"]),
-        v("ROI", &["אר או איי", "ארואיי", "אר.או.איי"]),
-        v("AI", &["איי איי", "אי איי", "איי.איי"]),
-        v("profit share", &["פרופיט שר", "פרופיט שייר", "פרופיטשר"]),
-    ]
 }
 
 /// "01:02:03" or "02:03" for a time in seconds.
@@ -379,25 +275,6 @@ mod tests {
         )];
         let me = vec![seg(Speaker::Me, 6.0, 8.0, "yes exactly")];
         assert_eq!(merge(me, them).len(), 2);
-    }
-
-    #[test]
-    fn rewrites_hebrew_spellings_of_known_terms() {
-        let fixer = VocabFixer::new(&default_vocabulary());
-        assert_eq!(fixer.apply("צריך לשפר את ה סי אר או"), "צריך לשפר את ה CRO");
-        assert_eq!(fixer.apply("מה הסי אר או שלנו?"), "מה ה-CRO שלנו?");
-        assert_eq!(fixer.apply("סי.אר.או ו אר או איי"), "CRO ו ROI");
-        assert_eq!(fixer.apply("נדבר על פרופיט שייר"), "נדבר על profit share");
-        assert_eq!(fixer.apply("איי איי, איי איי"), "AI, AI");
-        // Not inside other words.
-        assert_eq!(fixer.apply("קסי אר אוז"), "קסי אר אוז");
-    }
-
-    #[test]
-    fn prompt_lists_terms() {
-        let prompt = whisper_prompt(&default_vocabulary());
-        assert!(prompt.contains("CRO, ROI, AI, profit share"));
-        assert_eq!(whisper_prompt(&[]), "");
     }
 
     #[test]
