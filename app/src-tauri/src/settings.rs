@@ -10,6 +10,8 @@ use crate::transcript::{default_vocabulary, VocabTerm};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// The user's own name, shown instead of "Me" in transcripts and told to Claude.
+    pub your_name: String,
     /// Global start/stop shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
     /// Show a "Record this call?" pop-up when a Zoom, Meet or WhatsApp call starts.
@@ -28,6 +30,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            your_name: String::new(),
             shortcut: default_shortcut().into(),
             ask_on_call: true,
             default_language: "he".into(),
@@ -103,6 +106,7 @@ mod tests {
     fn missing_fields_take_defaults() {
         let s: Settings = serde_json::from_str(r#"{"default_language":"en"}"#).unwrap();
         assert_eq!(s.default_language, "en");
+        assert_eq!(s.your_name, "");
         assert_eq!(s.transcribe_when, "now");
         assert!(s.ask_on_call);
         assert_eq!(s.vocabulary.len(), 4);

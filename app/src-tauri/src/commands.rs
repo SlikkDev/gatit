@@ -12,7 +12,7 @@ use crate::settings::{self, Settings};
 use crate::state::{library_changed, state, Job};
 use crate::summary::Summary;
 use crate::transcribe::{self, Model};
-use crate::transcript::Transcript;
+use crate::transcript::{Names, Transcript};
 use crate::{jobs, recorder};
 
 #[derive(Serialize)]
@@ -68,6 +68,8 @@ pub fn list_meetings(app: AppHandle) -> Result<Vec<Meeting>, String> {
 #[derive(Serialize)]
 pub struct MeetingDetail {
     meeting: Meeting,
+    /// What the two tracks are called in this meeting's transcript.
+    names: Names,
     transcript: Option<Transcript>,
     summary: Option<Summary>,
     mic: Option<PathBuf>,
@@ -80,8 +82,10 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
     let lib = st.library();
     let folder = lib.folder(&id)?;
     let existing = |name: &str| Some(folder.join(name)).filter(|p| p.exists());
+    let meeting = lib.get(&id)?;
     Ok(MeetingDetail {
-        meeting: lib.get(&id)?,
+        names: lib.names(&meeting),
+        meeting,
         transcript: lib.transcript(&id),
         summary: lib.summary(&id),
         mic: existing("mic.m4a"),
@@ -93,6 +97,8 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
 pub struct MeetingChanges {
     title: Option<String>,
     source_app: Option<String>,
+    /// The other people on the call, as typed by the user.
+    participants: Option<Vec<String>>,
 }
 
 #[tauri::command]
@@ -115,8 +121,13 @@ pub fn update_meeting(
         if let Some(app_name) = changes.source_app {
             m.source_app = app_name;
         }
+        if let Some(people) = changes.participants {
+            m.participants.clear();
+            m.add_participants(people.iter().map(String::as_str));
+            m.participants_edited = true;
+        }
     })?;
-    let _ = lib.write_markdown(&id);
+    let _ = lib.refresh(&id);
     drop(lib);
     library_changed(&app, &id);
     Ok(meeting)
@@ -248,6 +259,9 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
         register_shortcut(&app, &settings.shortcut, Some(&old.shortcut))?;
     }
     settings::save(&st.settings_path, &settings)?;
+    if settings.your_name.trim() != old.your_name.trim() {
+        st.library().set_your_name(&settings.your_name)?;
+    }
     *st.settings.lock().unwrap() = settings;
     Ok(())
 }
