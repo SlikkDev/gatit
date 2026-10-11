@@ -5,11 +5,13 @@ on:
     branches: [main]
   pull_request:
 
-# Every build gets a version of its own (0.1.<run number>) so the app can tell a newer one
-# apart. Apple signing, notarization and update signatures switch on when the matching
-# secrets exist (see docs/signing.md) and fall back to an ad-hoc build without them.
+# Every build gets a version of its own (0.2.<run number>) so the app can tell a newer one
+# apart. The run numbers restarted when this workflow was renamed and the last 0.1 build was
+# 0.1.34, so the minor version went up to keep versions increasing. Apple signing,
+# notarization and update signatures switch on when the matching secrets exist (see
+# docs/signing.md) and fall back to an ad-hoc build without them.
 env:
-  GATIT_VERSION: 0.1.${{ github.run_number }}
+  GATIT_VERSION: 0.2.${{ github.run_number }}
 
 jobs:
   test:
