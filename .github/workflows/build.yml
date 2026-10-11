@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Every build gets a version of its own (0.1.<run number>) so the app can tell a newer one
+# apart. Apple signing, notarization and update signatures switch on when the matching
+# secrets exist (see docs/signing.md) and fall back to an ad-hoc build without them.
+env:
+  GATIT_VERSION: 0.1.${{ github.run_number }}
+
 jobs:
   test:
     name: Rust checks and tests (Linux)
@@ -49,9 +55,11 @@ jobs:
           - name: Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
+            slug: intel
           - name: Apple Silicon
             runner: macos-15
             target: aarch64-apple-darwin
+            slug: apple-silicon
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -72,15 +80,35 @@ jobs:
         run: scripts/build-whisper-mac.sh ${{ matrix.target }}
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
+      # Tauri treats an APPLE_CERTIFICATE that is set but empty as a certificate to import, so
+      # only the secrets that exist become environment variables for the build.
+      - name: Expose the signing secrets that exist
+        env:
+          # Apple Developer ID signing and notarization (Tauri reads these itself).
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Signs the update packages the app checks for.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: scripts/ci-export-secrets.sh APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Choose signing (Developer ID when the secrets exist, ad-hoc otherwise)
+        run: scripts/ci-build-config.sh "$GATIT_VERSION" > build-config.json
       - name: Build app bundle
         working-directory: app/src-tauri
-        run: cargo tauri build --target ${{ matrix.target }} --bundles app
-      - name: Zip app (keeps executable permissions)
-        run: ditto -c -k --keepParent app/src-tauri/target/${{ matrix.target }}/release/bundle/macos/Gatit.app Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}.zip
+        run: cargo tauri build --target ${{ matrix.target }} --bundles app --config ../../build-config.json
+      - name: Collect the app and the update package
+        run: scripts/ci-collect-mac.sh ${{ matrix.target }} ${{ matrix.slug }}
       - uses: actions/upload-artifact@v4
         with:
-          name: Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}
-          path: Gatit-macos-*.zip
+          name: Gatit-macos-${{ matrix.slug }}
+          path: |
+            Gatit-macos-${{ matrix.slug }}.zip
+            Gatit-macos-${{ matrix.slug }}.app.tar.gz
+            Gatit-macos-${{ matrix.slug }}.app.tar.gz.sig
+            Gatit-macos-${{ matrix.slug }}.signing
 
   windows:
     name: Gatit installer (Windows)
@@ -104,15 +132,28 @@ jobs:
         run: ./scripts/build-whisper-windows.ps1
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
+      # No Microsoft signing yet; the update package is signed with the same key as on the Mac.
+      - name: Expose the update signing key if it exists
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bash scripts/ci-export-secrets.sh TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Version the build (and sign the update package when the key exists)
+        shell: bash
+        run: bash scripts/ci-build-config.sh "$GATIT_VERSION" > build-config.json
       - name: Build installer
         working-directory: app/src-tauri
-        run: cargo tauri build --bundles nsis
-      - name: Collect installer
-        run: Copy-Item (Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1).FullName Gatit-windows-setup.exe
+        run: cargo tauri build --bundles nsis --config ../../build-config.json
+      - name: Collect the installer and the update signature
+        shell: bash
+        run: bash scripts/ci-collect-windows.sh
       - uses: actions/upload-artifact@v4
         with:
           name: Gatit-windows
-          path: Gatit-windows-setup.exe
+          path: |
+            Gatit-windows-setup.exe
+            Gatit-windows-setup.exe.sig
 
   release:
     name: Publish downloads
@@ -122,11 +163,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
       - uses: actions/download-artifact@v4
         with:
           pattern: Gatit-*
           path: dist
           merge-multiple: true
+      - name: Write the update feed and the release notes
+        run: scripts/ci-release-notes.sh "$GATIT_VERSION" dist
       - name: Replace the "latest" pre-release with this build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -137,5 +183,5 @@ jobs:
           gh release create latest dist/* \
             --prerelease \
             --target "$GITHUB_SHA" \
-            --title "Latest build" \
-            --notes "Built from commit ${GITHUB_SHA::7}. Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip, **Gatit-macos-intel.zip** for an Intel Mac, or **Gatit-windows-setup.exe** for Windows. The builds are not signed by Apple or Microsoft, so the first launch needs a couple of extra clicks: see [Getting the app](https://github.com/${GITHUB_REPOSITORY}#getting-the-app)."
+            --title "Gatit $GATIT_VERSION" \
+            --notes-file release-notes.md

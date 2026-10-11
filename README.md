@@ -41,7 +41,9 @@ The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/ga
 
 ### Mac
 
-Unzip it and drag `Gatit.app` into Applications. The app carries only an ad-hoc signature (no Apple developer certificate, no notarization), so macOS blocks the first launch:
+Unzip it and drag `Gatit.app` into Applications. From then on Gatit updates itself: it checks the latest release every few hours, installs a newer build in the background and shows a **Restart** button (in the window and in the menu bar) when one is ready; it never restarts during a recording.
+
+The release notes say whether the build is signed with an Apple Developer ID and notarized (then it opens like any other app) or only ad-hoc signed. [docs/signing.md](docs/signing.md) explains how to turn signing and notarization on. An ad-hoc build is blocked on the first launch:
 
 - **macOS 15 (Sequoia):** double-click Gatit and click **Done** on the warning. Open System Settings → Privacy & Security, scroll down to the line about Gatit and click **Open Anyway**, then **Open** on the next warning.
 - **macOS 14 (Sonoma):** Control-click (right-click) Gatit → **Open** → **Open**.
@@ -52,6 +54,8 @@ macOS remembers the choice, so later launches are a normal double-click. On the 
 ### Windows
 
 Run the installer. It is not signed, so SmartScreen shows "Windows protected your PC": click **More info**, then **Run anyway**. The installer puts Gatit in your user account (no admin rights needed) and the app lives in the system tray. If recording fails with a microphone error, allow desktop apps to use the microphone in Settings → Privacy & security → Microphone. The other side of the call is captured from the default output device with WASAPI loopback, so use the speakers or headphones Windows considers the default.
+
+Gatit updates itself on Windows too: when a newer build is published, the window and the tray menu show a **Restart** button, and clicking it runs the new installer, which replaces Gatit and opens it again. It refuses to do that during a recording.
 
 Builds for pull requests are workflow artifacts on the Actions run instead. GitHub wraps those in a second zip, so unzip twice.
 
@@ -94,10 +98,11 @@ In development on the Mac, the permission prompts name your terminal app instead
   - `summary.rs` calls the Claude API with a structured-output schema. The instructions are in `prompts/summary.md`; "Edit the summary instructions" in Settings gives you an editable copy.
   - `library.rs` is the meetings folder plus the SQLite full-text index (trigram tokenizer, for Hebrew prefixes).
   - `jobs.rs` runs transcription and summaries one at a time in the background and resumes unfinished work on launch.
+  - `updater.rs` checks the latest release for a newer build, installs it and asks for a restart.
   - `drive.rs` signs in to Google (OAuth with PKCE, loopback redirect) and mirrors each meeting folder to Drive, one meeting at a time, retrying failures.
   - `models.json` lists the model downloads.
 - `app/ui/`: the window, plain HTML and JavaScript.
-- `scripts/`: builds for the recorders and whisper.cpp, on both platforms.
+- `scripts/`: builds for the recorders and whisper.cpp on both platforms, and the `ci-*.sh` helpers the GitHub Actions workflow uses to pick the signing identity, collect the downloads and write the update feed ([docs/signing.md](docs/signing.md)).
 
 ## License
 

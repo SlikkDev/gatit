@@ -324,6 +324,17 @@ function renderProgress() {
   }
 }
 
+// ---------- updates ----------
+
+function showUpdate(version) {
+  if (!version) return;
+  $("update-text").textContent = `Gatit ${version} is ready.`;
+  $("update").hidden = false;
+}
+
+listen("update", ({ payload }) => showUpdate(payload.version));
+$("restart").addEventListener("click", () => invoke("restart_to_update").catch((e) => ($("update-text").textContent = String(e))));
+
 listen("job", ({ payload }) => {
   state.job = payload;
   renderProgress();
@@ -550,7 +561,7 @@ async function openSettings() {
   $("key-status").textContent = status.has_api_key
     ? `A key is saved in the ${store}. Paste a new one to replace it, or type "remove" to delete it.`
     : `No key yet. Keys are stored in the ${store}, never in a file.`;
-  $("about").textContent = `${status.os} · ${status.arch === "x86_64" ? "Intel" : status.arch}`;
+  $("about").textContent = `Gatit ${status.version} · ${status.os} · ${status.arch === "x86_64" ? "Intel" : status.arch}`;
   $("empty").hidden = true;
   $("detail").hidden = true;
   $("settings").hidden = false;
@@ -697,6 +708,7 @@ function formatShortcut(shortcut, mac) {
     state.recordingSince = status.started_at_ms || Date.now();
     setRecording(true);
   }
+  showUpdate(status.update_ready);
   await refreshList();
   showEmpty();
 })();

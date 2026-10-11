@@ -15,6 +15,7 @@ mod state;
 mod summary;
 mod transcribe;
 mod transcript;
+mod updater;
 mod vocabulary;
 
 use std::collections::HashSet;
@@ -40,6 +41,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -93,6 +95,12 @@ fn main() {
                     "folder" => {
                         let _ = commands::open_library_folder(app.clone());
                     }
+                    "update" => {
+                        if let Err(e) = updater::restart(app) {
+                            eprintln!("{e}");
+                            show_window(app);
+                        }
+                    }
                     "quit" => recorder::stop_and_quit(app),
                     _ => {}
                 })
@@ -121,6 +129,7 @@ fn main() {
             jobs::resume_pending(&handle);
             drive::resume(&handle);
             calls::watch(&handle);
+            updater::start(&handle, menu);
             Ok(())
         })
         // Closing the window keeps Gatit (and any recording) running in the menu bar.
@@ -158,6 +167,7 @@ fn main() {
             commands::drive_connect,
             commands::drive_disconnect,
             commands::upload_meeting,
+            commands::restart_to_update,
             calls::pending_call,
             calls::answer_call_prompt,
         ])
