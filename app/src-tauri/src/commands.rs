@@ -56,7 +56,7 @@ pub fn toggle_recording(app: AppHandle) -> Result<(), String> {
     if recorder::is_recording(&app) {
         recorder::stop(&app)
     } else {
-        recorder::start(&app)
+        recorder::start(&app, None)
     }
 }
 

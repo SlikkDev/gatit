@@ -68,7 +68,9 @@ pub fn is_recording(app: &AppHandle) -> bool {
     state(app).recording().child.is_some()
 }
 
-pub fn start(app: &AppHandle) -> Result<(), String> {
+/// Starts recording. `source_app` is the call app when known (from the call pop-up);
+/// otherwise it's guessed from what's running.
+pub fn start(app: &AppHandle, source_app: Option<String>) -> Result<(), String> {
     if let Some(reason) = recording_blocker() {
         return Err(reason);
     }
@@ -79,9 +81,8 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     }
 
     let language = st.settings().default_language;
-    let meeting = st
-        .library()
-        .create(Local::now(), detect_call_app(), language)?;
+    let source_app = source_app.unwrap_or_else(detect_call_app);
+    let meeting = st.library().create(Local::now(), source_app, language)?;
     let folder = st.library().folder(&meeting.id)?;
 
     let (mut events, child) = app
@@ -97,6 +98,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
     rec.started_at_ms = None;
     drop(rec);
     let _ = st.toggle_item.set_text("Stop recording");
+    crate::calls::close_prompt(app);
     let _ = app.emit("recorder", json!({ "event": "starting" }));
     library_changed(app, &meeting.id);
 
@@ -201,7 +203,7 @@ pub fn toggle(app: &AppHandle) {
     let result = if is_recording(app) {
         stop(app)
     } else {
-        start(app)
+        start(app, None)
     };
     if let Err(message) = result {
         let _ = app.emit("recorder", json!({ "event": "error", "message": message }));

@@ -432,6 +432,7 @@ async function openSettings() {
   state.settings = await invoke("get_settings");
   const s = state.settings;
   $("s-shortcut").value = s.shortcut;
+  $("s-ask").checked = s.ask_on_call;
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
   $("s-when").value = s.transcribe_when;
@@ -483,6 +484,7 @@ $("save-settings").addEventListener("click", async () => {
   const s = {
     ...state.settings,
     shortcut: $("s-shortcut").value.trim(),
+    ask_on_call: $("s-ask").checked,
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,
     transcribe_when: $("s-when").value,

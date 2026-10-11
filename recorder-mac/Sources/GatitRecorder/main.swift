@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 // gatit-recorder --out <folder>
+// gatit-recorder --watch-calls   (see CallWatcher.swift)
 //
 // Records the microphone to <folder>/mic.m4a and system audio to <folder>/system.m4a
 // until it reads "stop" on stdin, receives SIGINT/SIGTERM, or the Mac is about to sleep. Progress is reported to
@@ -19,6 +20,9 @@ func fail(_ message: String) -> Never {
 }
 
 let arguments = CommandLine.arguments
+if arguments.contains("--watch-calls") {
+    runCallWatcher()
+}
 guard let outIndex = arguments.firstIndex(of: "--out"), outIndex + 1 < arguments.count else {
     fail("usage: gatit-recorder --out <folder>")
 }
