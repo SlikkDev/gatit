@@ -146,15 +146,15 @@ mod tests {
                 win("zoom.us", "Dana Cohen's Zoom Meeting"),
                 win("Finder", "Downloads"),
             ],
-            "Yarin Barry",
+            "Noa Levi",
         );
         assert_eq!(hints.source_app.as_deref(), Some("Zoom"));
         assert_eq!(hints.participants, vec!["Dana Cohen"]);
 
         // The user's own meeting room doesn't make them a participant.
         let mine = from_windows(
-            &[win("zoom.us", "Yarin Barry’s Personal Meeting Room")],
-            "yarin barry",
+            &[win("zoom.us", "Noa Levi’s Personal Meeting Room")],
+            "noa levi",
         );
         assert_eq!(mine.source_app.as_deref(), Some("Zoom"));
         assert!(mine.participants.is_empty());

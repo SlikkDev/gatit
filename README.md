@@ -82,3 +82,7 @@ In development the permission prompts name your terminal app instead of Gatit.
   - `models.json` lists the model downloads.
 - `app/ui/`: the window, plain HTML and JavaScript.
 - `scripts/`: builds for the Swift recorder and whisper.cpp.
+
+## License
+
+[MIT](LICENSE).

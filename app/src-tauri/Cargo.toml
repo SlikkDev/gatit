@@ -3,6 +3,7 @@ name = "gatit"
 version = "0.1.0"
 description = "Record, transcribe and summarize calls without a bot joining them"
 edition = "2021"
+license = "MIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
