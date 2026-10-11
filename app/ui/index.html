@@ -118,9 +118,16 @@
         </select>
       </label>
       <div id="models" class="models"></div>
-      <label>Vocabulary (one per line: <code>Term = Hebrew spelling, another spelling</code>)
+      <label><input id="s-builtin-vocab" type="checkbox"> Keep English terms said in Hebrew in English letters
+        <small>A built-in list of business, marketing and tech terms Israelis say in English (KPI, landing page, LinkedIn…). Everyday loanwords like מייל or פידבק stay in Hebrew.</small>
+      </label>
+      <details class="vocab-list">
+        <summary id="builtin-vocab-summary">See the built-in terms</summary>
+        <div id="builtin-vocab"></div>
+      </details>
+      <label>Your own terms (one per line: <code>Term = Hebrew spelling, another spelling</code>)
         <textarea id="s-vocab" rows="6" spellcheck="false"></textarea>
-        <small>Terms are given to Whisper as a hint and any Hebrew-letter spellings are rewritten to the term.</small>
+        <small>Names, products and jargon from your own calls. They're given to Whisper as a hint first, and the Hebrew-letter spellings you list are rewritten to the term.</small>
       </label>
 
       <h3>Summaries</h3>
