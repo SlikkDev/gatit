@@ -1,7 +1,8 @@
 //! Notices calls starting and offers to record them. The Swift sidecar, run as
 //! `gatit-recorder --watch-calls`, reports when Zoom, WhatsApp or a browser (Meet) starts or
 //! stops using the microphone; this module shows a small "Record this call?" pop-up in the
-//! top-right corner of the screen.
+//! top-right corner of the screen. On macOS it floats over the call even when the call is full
+//! screen, and never takes keyboard focus (see `panel.rs`).
 
 use std::time::Duration;
 
@@ -139,6 +140,8 @@ fn build_prompt(app: &AppHandle) -> tauri::Result<()> {
             // Don't take focus away from the call; a click still lands on the first try.
             .focused(false)
             .accept_first_mouse(true)
+            // Shown by `panel::float_over_calls` once it can float over the call.
+            .visible(!cfg!(target_os = "macos"))
             // A rounded, blurred panel like macOS's own notifications.
             .transparent(true)
             .effects(WindowEffectsConfig {
@@ -150,6 +153,8 @@ fn build_prompt(app: &AppHandle) -> tauri::Result<()> {
 
     let window = builder.build()?;
     let _ = window.set_position(LogicalPosition::new(x, y));
+    #[cfg(target_os = "macos")]
+    crate::panel::float_over_calls(&window);
     Ok(())
 }
 
