@@ -23,7 +23,7 @@ On an Intel Mac, transcription runs on the CPU and takes roughly as long as the 
 
 This repository is public. Recordings, transcripts and API keys never live in it:
 
-- Each call is a folder under `~/Library/Application Support/dev.slikk.gatit/meetings/` with `mic.m4a`, `system.m4a`, `transcript.json`, `summary.json` and `meeting.md`. Plain files, so syncing the library between machines later only needs to copy folders.
+- Each call is a folder under `~/Library/Application Support/dev.slikk.gatit/meetings/` with `mic.m4a`, `system.m4a`, `video.mp4` (when the call had a window to record), `transcript.json`, `summary.json` and `meeting.md`. Plain files, so syncing the library between machines later only needs to copy folders.
 - The search index (`index.sqlite`) is a cache rebuilt from those folders on every launch.
 - The Claude API key is stored in the macOS Keychain and read from nowhere else.
 - `.gitignore` blocks audio, models, databases and `.env` files as a safety net.
@@ -34,7 +34,7 @@ Some places require telling the other people on a call that you are recording.
 
 Every push builds `Gatit.app` on GitHub Actions. Download the **Gatit-macos-intel** (2019 MacBook Pro) or **Gatit-macos-apple-silicon** artifact from the run, unzip it, and right-click → Open the first time, because the build is unsigned.
 
-On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**.
+On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**. With video on (Settings > Recording, on by default) it also asks for **Screen & System Audio Recording**; until that's allowed, calls are recorded as audio only, and allowing it takes effect from the next call.
 
 ## Building it yourself
 
@@ -53,7 +53,7 @@ In development the permission prompts name your terminal app instead of Gatit.
 
 ## Layout
 
-- `recorder-mac/`: Swift command-line recorder. It uses a Core Audio process tap for system audio (no screen-recording permission and no purple indicator) and AVAudioEngine for the mic, and talks to the app over JSON lines on stdout. It finishes both files cleanly on stop, quit, or when the Mac goes to sleep.
+- `recorder-mac/`: Swift command-line recorder. It uses a Core Audio process tap for system audio (no screen-recording permission and no purple indicator) and AVAudioEngine for the mic, and talks to the app over JSON lines on stdout. It finishes both files cleanly on stop, quit, or when the Mac goes to sleep. With `--video` it also records the call's window (the Zoom meeting, the browser window showing Meet, or WhatsApp) with ScreenCaptureKit, picking the window up again if it closes and reopens; after the call, `--mux` copies that video and both audio tracks, mixed, into one `video.mp4`.
 - `app/src-tauri/`: the Tauri 2 app.
   - `recorder.rs` starts and stops the recorder sidecar and files each recording as a meeting.
   - `transcribe.rs` runs `whisper-cli` on both tracks (with silence detection) and `transcript.rs` merges them into one Me/Them transcript, drops the other side's voice leaking into your mic, and rewrites Hebrew-letter spellings of known terms.

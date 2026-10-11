@@ -12,6 +12,8 @@ use crate::transcript::{default_vocabulary, VocabTerm};
 pub struct Settings {
     /// Global start/stop shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
+    /// Also record the call app's window (Zoom, Meet, WhatsApp) as video.
+    pub record_video: bool,
     /// Language for new meetings: "he", "en" or "auto".
     pub default_language: String,
     /// "compressed" (quantized, faster, the default on Intel Macs) or "full".
@@ -27,6 +29,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             shortcut: default_shortcut().into(),
+            record_video: true,
             default_language: "he".into(),
             hebrew_model: if cfg!(target_arch = "x86_64") {
                 "compressed"
@@ -101,6 +104,7 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"default_language":"en"}"#).unwrap();
         assert_eq!(s.default_language, "en");
         assert_eq!(s.transcribe_when, "now");
+        assert!(s.record_video);
         assert_eq!(s.vocabulary.len(), 4);
     }
 }

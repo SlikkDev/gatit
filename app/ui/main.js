@@ -119,6 +119,9 @@ listen("recorder", ({ payload }) => {
       showError(payload.message);
       $("record").disabled = false;
       break;
+    case "notice":
+      showError(payload.message);
+      break;
     case "idle":
       setRecording(false);
       break;
@@ -222,7 +225,7 @@ function showEmpty() {
 }
 
 function renderDetail() {
-  const { meeting, transcript, summary, mic, system } = state.detail;
+  const { meeting, transcript, summary, mic, system, video, video_offset } = state.detail;
   $("empty").hidden = true;
   $("detail").hidden = false;
 
@@ -287,7 +290,7 @@ function renderDetail() {
     area.append(el("p", { class: "muted", text: "Not transcribed yet." }));
   }
 
-  setupPlayer(mic, system, meeting.duration_secs);
+  setupPlayer(mic, system, meeting.duration_secs, video, video_offset);
 }
 
 function renderProgress() {
@@ -349,13 +352,30 @@ const player = { tracks: [], duration: 0, timer: null };
 
 function stopPlayer() {
   for (const a of player.tracks) { a.pause(); a.src = ""; }
+  $("video").pause();
   player.tracks = [];
   clearInterval(player.timer);
   $("player").hidden = true;
 }
 
-function setupPlayer(mic, system, duration) {
+function setupPlayer(mic, system, duration, video, videoOffset) {
   stopPlayer();
+  // The video is muted and follows the audio tracks, which carry the sound.
+  const v = $("video");
+  player.video = video ? v : null;
+  player.videoOffset = videoOffset || 0;
+  v.hidden = !video;
+  if (video) {
+    if (v.dataset.path !== video) {
+      v.src = convertFileSrc(video);
+      v.dataset.path = video;
+    }
+    v.currentTime = 0;
+  } else {
+    v.removeAttribute("src");
+    delete v.dataset.path;
+    v.load();
+  }
   player.tracks = [mic, system].filter(Boolean).map((path) => {
     const audio = new Audio(convertFileSrc(path));
     audio.preload = "metadata";
@@ -379,6 +399,7 @@ function updatePlayerUi() {
   const t = player.tracks[0].currentTime;
   if (player.duration) $("seek").value = (t / player.duration) * 100;
   $("player-time").textContent = `${fmtTime(t)} / ${fmtTime(player.duration)}`;
+  syncVideo(t);
   let current = null;
   for (const line of $("transcript").querySelectorAll(".line")) {
     const hit = t >= +line.dataset.start && t < +line.dataset.end + 0.5;
@@ -389,12 +410,29 @@ function updatePlayerUi() {
 
 function seekTo(seconds) {
   for (const a of player.tracks) a.currentTime = seconds;
+  syncVideo(seconds, true);
   play();
+}
+
+// Keeps the video at the audio's position; it's blank until the call window appeared.
+function syncVideo(t, force) {
+  const v = player.video;
+  if (!v) return;
+  const target = t - player.videoOffset;
+  const playing = player.tracks.length && !player.tracks[0].paused;
+  if (target < 0 || (isFinite(v.duration) && target > v.duration)) {
+    if (!v.paused) v.pause();
+    return;
+  }
+  if (force || Math.abs(v.currentTime - target) > 0.4) v.currentTime = target;
+  if (playing && v.paused) v.play().catch(() => {});
+  if (!playing && !v.paused) v.pause();
 }
 
 function play() {
   for (const a of player.tracks) a.play().catch(() => {});
   $("play").textContent = "⏸";
+  if (player.tracks.length) syncVideo(player.tracks[0].currentTime, true);
 }
 
 $("play").addEventListener("click", () => {
@@ -402,12 +440,15 @@ $("play").addEventListener("click", () => {
   if (player.tracks[0].paused) play();
   else {
     for (const a of player.tracks) a.pause();
+    if (player.video) player.video.pause();
     $("play").textContent = "▶";
   }
 });
+$("video").addEventListener("click", () => $("play").click());
 $("seek").addEventListener("input", () => {
   const t = ($("seek").value / 100) * player.duration;
   for (const a of player.tracks) a.currentTime = t;
+  syncVideo(t, true);
 });
 
 // ---------- settings ----------
@@ -432,6 +473,7 @@ async function openSettings() {
   state.settings = await invoke("get_settings");
   const s = state.settings;
   $("s-shortcut").value = s.shortcut;
+  $("s-video").checked = s.record_video;
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
   $("s-when").value = s.transcribe_when;
@@ -483,6 +525,7 @@ $("save-settings").addEventListener("click", async () => {
   const s = {
     ...state.settings,
     shortcut: $("s-shortcut").value.trim(),
+    record_video: $("s-video").checked,
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,
     transcribe_when: $("s-when").value,

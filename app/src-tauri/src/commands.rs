@@ -72,6 +72,9 @@ pub struct MeetingDetail {
     summary: Option<Summary>,
     mic: Option<PathBuf>,
     system: Option<PathBuf>,
+    video: Option<PathBuf>,
+    /// Seconds into the audio that the video starts.
+    video_offset: f64,
 }
 
 #[tauri::command]
@@ -80,12 +83,26 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
     let lib = st.library();
     let folder = lib.folder(&id)?;
     let existing = |name: &str| Some(folder.join(name)).filter(|p| p.exists());
+    // video.mp4 is lined up with the audio; until it exists, screen.mp4 starts `offset` in.
+    let (video, video_offset) = match existing("video.mp4") {
+        Some(path) => (Some(path), 0.0),
+        None => {
+            let offset = std::fs::read(folder.join("screen.json"))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                .and_then(|v| v["offset"].as_f64())
+                .unwrap_or(0.0);
+            (existing("screen.mp4"), offset)
+        }
+    };
     Ok(MeetingDetail {
         meeting: lib.get(&id)?,
         transcript: lib.transcript(&id),
         summary: lib.summary(&id),
         mic: existing("mic.m4a"),
         system: existing("system.m4a"),
+        video,
+        video_offset,
     })
 }
 

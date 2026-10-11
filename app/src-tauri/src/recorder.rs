@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
-use crate::library::Status;
+use crate::library::{default_title, Status};
 use crate::state::{library_changed, state, Job};
 
 /// The process tap that records the other side of the call needs macOS 14.2.
@@ -78,17 +78,24 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         return Err("Already recording.".into());
     }
 
-    let language = st.settings().default_language;
+    let (language, record_video) = {
+        let settings = st.settings();
+        (settings.default_language.clone(), settings.record_video)
+    };
     let meeting = st
         .library()
         .create(Local::now(), detect_call_app(), language)?;
     let folder = st.library().folder(&meeting.id)?;
 
+    let mut args = vec!["--out".into(), folder.into_os_string()];
+    if record_video {
+        args.push("--video".into());
+    }
     let (mut events, child) = app
         .shell()
         .sidecar("gatit-recorder")
         .map_err(|e| e.to_string())?
-        .args(["--out".as_ref(), folder.as_os_str()])
+        .args(args)
         .spawn()
         .map_err(|e| e.to_string())?;
     rec.child = Some(child);
@@ -118,6 +125,11 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                             rec.started_at_ms = Some(Local::now().timestamp_millis());
                         }
                         Some("error") => last_error = value["message"].as_str().map(String::from),
+                        Some("video") => {
+                            if let Some(name) = value["app"].as_str() {
+                                set_source_app(&app, &id, name);
+                            }
+                        }
                         _ => {}
                     }
                     let _ = app.emit("recorder", value);
@@ -135,6 +147,50 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         finished(&app, &id, last_error);
     });
     Ok(())
+}
+
+/// Fills in the call app from the window being recorded (the only way to tell it's Meet),
+/// unless it's already known.
+fn set_source_app(app: &AppHandle, id: &str, name: &str) {
+    let st = state(app);
+    let updated = st.library().update(id, |m| {
+        if m.source_app.is_empty() {
+            m.source_app = name.to_string();
+            if !m.title_edited {
+                m.title = default_title(&m.started_at, name);
+            }
+        }
+    });
+    if updated.is_ok() {
+        library_changed(app, id);
+    }
+}
+
+/// Combines a recording's screen.mp4 with its audio into video.mp4 (see `muxVideo` in the
+/// recorder), in the background. Does nothing when there's no separate video waiting.
+pub fn combine_video(app: &AppHandle, id: &str) {
+    let Ok(folder) = state(app).library().folder(id) else {
+        return;
+    };
+    if !folder.join("screen.mp4").exists() {
+        return;
+    }
+    let Ok(command) = app.shell().sidecar("gatit-recorder") else {
+        return;
+    };
+    let command = command.args(["--mux".as_ref(), folder.as_os_str()]);
+    let app = app.clone();
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move {
+        match command.output().await {
+            Ok(out) if out.status.success() => library_changed(&app, &id),
+            Ok(out) => eprintln!(
+                "gatit-recorder --mux: {}",
+                String::from_utf8_lossy(&out.stdout).trim_end()
+            ),
+            Err(e) => eprintln!("gatit-recorder --mux: {e}"),
+        }
+    });
 }
 
 /// Called when the recorder process exits, however it stopped.
@@ -157,6 +213,7 @@ fn finished(app: &AppHandle, id: &str, error: Option<String>) {
                 m.duration_secs = secs;
                 m.status = Status::Recorded;
             });
+            combine_video(app, id);
             if st.settings().transcribe_when != "manual" {
                 st.enqueue(Job::Process(id.to_string()));
             }
