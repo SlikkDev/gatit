@@ -6,6 +6,8 @@
 //!   meeting.json     title, time, length, app, language, status
 //!   mic.m4a          your side ("Me")
 //!   system.m4a       everyone else ("Them")
+//!   video.mp4        the call app's window with both sides mixed in, when video was recorded
+//!                    (screen.mp4 + screen.json until the two are combined after the call)
 //!   transcript.json  merged Me/Them transcript
 //!   summary.json     Claude's summary
 //!   meeting.md       readable export of all of the above

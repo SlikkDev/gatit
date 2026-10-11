@@ -80,17 +80,24 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         return Err("Already recording.".into());
     }
 
-    let language = st.settings().default_language;
+    let (language, record_video) = {
+        let settings = st.settings();
+        (settings.default_language.clone(), settings.record_video)
+    };
     let meeting = st
         .library()
         .create(Local::now(), detect_call_app(), language)?;
     let folder = st.library().folder(&meeting.id)?;
 
+    let mut args = vec!["--out".into(), folder.into_os_string()];
+    if record_video {
+        args.push("--video".into());
+    }
     let (mut events, child) = app
         .shell()
         .sidecar("gatit-recorder")
         .map_err(|e| e.to_string())?
-        .args(["--out".as_ref(), folder.as_os_str()])
+        .args(args)
         .spawn()
         .map_err(|e| e.to_string())?;
     rec.child = Some(child);
@@ -121,6 +128,13 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
                         }
                         Some("windows") => apply_hints(&app, &id, &value["windows"]),
                         Some("error") => last_error = value["message"].as_str().map(String::from),
+                        // The call window the video recorder found, possibly after the call
+                        // started: it names the app and sometimes the person, like the list above.
+                        Some("video") => apply_hints(
+                            &app,
+                            &id,
+                            &json!([{ "app": value["app"], "title": value["window"] }]),
+                        ),
                         _ => {}
                     }
                     let _ = app.emit("recorder", value);
@@ -138,6 +152,33 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         finished(&app, &id, last_error);
     });
     Ok(())
+}
+
+/// Combines a recording's screen.mp4 with its audio into video.mp4 (see `muxVideo` in the
+/// recorder), in the background. Does nothing when there's no separate video waiting.
+pub fn combine_video(app: &AppHandle, id: &str) {
+    let Ok(folder) = state(app).library().folder(id) else {
+        return;
+    };
+    if !folder.join("screen.mp4").exists() {
+        return;
+    }
+    let Ok(command) = app.shell().sidecar("gatit-recorder") else {
+        return;
+    };
+    let command = command.args(["--mux".as_ref(), folder.as_os_str()]);
+    let app = app.clone();
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move {
+        match command.output().await {
+            Ok(out) if out.status.success() => library_changed(&app, &id),
+            Ok(out) => eprintln!(
+                "gatit-recorder --mux: {}",
+                String::from_utf8_lossy(&out.stdout).trim_end()
+            ),
+            Err(e) => eprintln!("gatit-recorder --mux: {e}"),
+        }
+    });
 }
 
 /// Fills in the call app and the people on the call from the windows the recorder saw open,
@@ -185,6 +226,7 @@ fn finished(app: &AppHandle, id: &str, error: Option<String>) {
                 m.duration_secs = secs;
                 m.status = Status::Recorded;
             });
+            combine_video(app, id);
             if st.settings().transcribe_when != "manual" {
                 st.enqueue(Job::Process(id.to_string()));
             }
