@@ -73,13 +73,12 @@ Task {
         try mic.start(writingTo: folder.appendingPathComponent("mic.m4a"))
         emit(["event": "started", "folder": folder.path])
         if arguments.contains("--video") {
-            stopLock.lock()
-            if !stopped {
+            stopLock.withLock {
+                guard !stopped else { return }
                 let recorder = VideoRecorder(writingTo: folder.appendingPathComponent("screen.mp4"), audioStart: audioStart)
                 video = recorder
                 recorder.start()
             }
-            stopLock.unlock()
         }
     } catch {
         mic.stop()
