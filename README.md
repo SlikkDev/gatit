@@ -33,9 +33,20 @@ Some places require telling the other people on a call that you are recording.
 
 ## Getting the app
 
-Every push builds `Gatit.app` on GitHub Actions. Download the **Gatit-macos-intel** (2019 MacBook Pro) or **Gatit-macos-apple-silicon** artifact from the run, unzip it, and right-click → Open the first time, because the build is unsigned.
+Every push to `main` publishes a build on the [latest release](https://github.com/SlikkDev/gatit/releases/latest) page. Download the one for your Mac (Apple menu → About This Mac shows the chip):
 
-On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**.
+- **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip (M1 or later).
+- **Gatit-macos-intel.zip** for an Intel Mac, such as a 2019 MacBook Pro.
+
+Unzip it and drag `Gatit.app` into Applications. The app carries only an ad-hoc signature (no Apple developer certificate, no notarization), so macOS blocks the first launch:
+
+- **macOS 15 (Sequoia):** double-click Gatit and click **Done** on the warning. Open System Settings → Privacy & Security, scroll down to the line about Gatit and click **Open Anyway**, then **Open** on the next warning.
+- **macOS 14 (Sonoma):** Control-click (right-click) Gatit → **Open** → **Open**.
+- If macOS says Gatit is "damaged and can't be opened", the download got quarantined before it was signed. Run `xattr -cr /Applications/Gatit.app` in Terminal and open it again.
+
+macOS remembers the choice, so later launches are a normal double-click. On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**.
+
+Builds for pull requests are workflow artifacts on the Actions run instead. GitHub wraps those in a second zip, so unzip twice.
 
 Reading the call app's window title (to tell a Zoom call from a Meet call, and to pick up the host's name from "Dana's Zoom Meeting" or a WhatsApp contact from the call window) works only for apps with **Screen Recording** permission. Gatit doesn't ask for it; grant it in System Settings > Privacy & Security if you want those filled in automatically. Without it, names still come from Claude's reading of the call and from what you type.
 
