@@ -12,6 +12,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "protocol-asset", "macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -29,6 +30,9 @@ open = "5"
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Power"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Already pulled in by Tauri; used directly to turn the call pop-up into a non-activating panel.

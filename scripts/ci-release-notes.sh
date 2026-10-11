@@ -34,7 +34,7 @@ for f in "$dist"/Gatit-macos-*.signing; do [ -e "$f" ] && rm "$f"; done
 {
   echo "Gatit $version, built from commit ${GITHUB_SHA:0:7}."
   echo
-  echo "Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip or **Gatit-macos-intel.zip** for an Intel Mac."
+  echo "Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip, **Gatit-macos-intel.zip** for an Intel Mac, or **Gatit-windows-setup.exe** for Windows (SmartScreen asks once: More info, then Run anyway)."
   echo
   case "$signing" in
     *notarized*) echo "Signed with an Apple Developer ID and notarized: unzip, drag to Applications and open it like any app." ;;
@@ -43,7 +43,7 @@ for f in "$dist"/Gatit-macos-*.signing; do [ -e "$f" ] && rm "$f"; done
   esac
   echo
   if [ -f "$dist/latest.json" ]; then
-    echo "Gatit updates itself: an installed copy picks this build up within a few hours and shows a Restart button. The \`.app.tar.gz\` files and \`latest.json\` are what it downloads."
+    echo "Gatit updates itself: an installed copy picks this build up within a few hours and shows a Restart button. The \`.app.tar.gz\` files, the \`.sig\` files and \`latest.json\` are what it uses."
   else
     echo "Gatit's updater cannot pick this build up yet (the update signing key isn't in the repository's secrets, see [docs/signing.md](https://github.com/$repo/blob/main/docs/signing.md)), so download it by hand."
   fi

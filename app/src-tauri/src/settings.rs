@@ -1,6 +1,6 @@
 //! User settings, stored as settings.json in the app's config folder. Secrets (the Claude API
-//! key, the Google Drive sign-in) are not settings: they live in the macOS Keychain (Windows
-//! Credential Manager later).
+//! key, the Google Drive sign-in) are not settings: they live in the macOS Keychain or the
+//! Windows Credential Manager.
 
 use std::path::Path;
 
@@ -21,7 +21,7 @@ pub struct Settings {
     pub record_video: bool,
     /// Language for new meetings: "he", "en" or "auto".
     pub default_language: String,
-    /// "compressed" (quantized, faster, the default on Intel Macs) or "full".
+    /// "compressed" (quantized, faster, the default on Intel Macs and Windows) or "full".
     pub hebrew_model: String,
     /// "now" (right after recording), "on_power" (wait until plugged in) or "manual".
     pub transcribe_when: String,

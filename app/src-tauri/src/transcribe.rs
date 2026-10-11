@@ -236,10 +236,31 @@ async fn run_sidecar(
     Err(format!("{name} stopped unexpectedly"))
 }
 
-/// Converts an .m4a track to WAV, which whisper.cpp can read (it resamples and downmixes
-/// to 16 kHz mono itself). Uses macOS's built-in afconvert, so no ffmpeg is needed.
+/// Audio file extensions a track may have: `.m4a` from the Mac recorder, `.wav` from the
+/// Windows one.
+const TRACK_EXTENSIONS: [&str; 2] = ["m4a", "wav"];
+
+/// Finds a meeting's `mic` or `system` track, whichever format it was recorded in.
+pub fn track_file(folder: &Path, base: &str) -> Option<PathBuf> {
+    TRACK_EXTENSIONS
+        .iter()
+        .map(|ext| folder.join(format!("{base}.{ext}")))
+        .find(|p| p.exists())
+}
+
+/// Returns a WAV file for a track, which whisper.cpp can read (it resamples and downmixes
+/// to 16 kHz mono itself). A `.wav` track is used as it is; an `.m4a` one is converted
+/// next to the output with macOS's built-in afconvert, so no ffmpeg is needed.
+async fn to_wav(input: &Path, output: &Path) -> Result<PathBuf, String> {
+    if input.extension().and_then(|e| e.to_str()) == Some("wav") {
+        return Ok(input.to_path_buf());
+    }
+    convert_to_wav(input, output).await?;
+    Ok(output.to_path_buf())
+}
+
 #[cfg(target_os = "macos")]
-async fn to_wav(input: &Path, output: &Path) -> Result<(), String> {
+async fn convert_to_wav(input: &Path, output: &Path) -> Result<(), String> {
     let status = tokio::process::Command::new("/usr/bin/afconvert")
         .args(["-f", "WAVE", "-d", "LEI16@16000"])
         .arg(input)
@@ -254,13 +275,15 @@ async fn to_wav(input: &Path, output: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "macos"))]
-async fn to_wav(input: &Path, _output: &Path) -> Result<(), String> {
+async fn convert_to_wav(input: &Path, _output: &Path) -> Result<(), String> {
     Err(format!(
-        "audio conversion of {} is only implemented on macOS so far",
+        "{} is not a WAV file, and converting audio is only implemented on macOS",
         input.display()
     ))
 }
 
+/// How many threads to give whisper: one per physical core works best, and more than 8
+/// stops helping.
 fn physical_cores() -> usize {
     #[cfg(target_os = "macos")]
     if let Ok(out) = std::process::Command::new("/usr/sbin/sysctl")
@@ -271,10 +294,16 @@ fn physical_cores() -> usize {
             return n.clamp(1, 8);
         }
     }
-    std::thread::available_parallelism()
+    let logical = std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(4)
-        .clamp(1, 8)
+        .unwrap_or(4);
+    // Windows reports logical processors; most of its CPUs have two per core.
+    let cores = if cfg!(target_os = "windows") && logical >= 4 {
+        logical / 2
+    } else {
+        logical
+    };
+    cores.clamp(1, 8)
 }
 
 fn progress_percent(line: &str) -> Option<f64> {
@@ -345,10 +374,9 @@ pub async fn transcribe_meeting(
     progress: Progress<'_>,
 ) -> Result<Transcript, String> {
     std::fs::create_dir_all(work_dir).map_err(|e| e.to_string())?;
-    let tracks: Vec<(Speaker, PathBuf)> = [(Speaker::Them, "system.m4a"), (Speaker::Me, "mic.m4a")]
+    let tracks: Vec<(Speaker, PathBuf)> = [(Speaker::Them, "system"), (Speaker::Me, "mic")]
         .into_iter()
-        .map(|(s, f)| (s, folder.join(f)))
-        .filter(|(_, p)| p.exists())
+        .filter_map(|(s, base)| track_file(folder, base).map(|p| (s, p)))
         .collect();
     if tracks.is_empty() {
         return Err("This meeting has no audio files.".into());
@@ -368,7 +396,7 @@ pub async fn transcribe_meeting(
 
     progress("Preparing audio", 0.0);
     let mut wavs = Vec::new();
-    for (speaker, m4a) in &tracks {
+    for (speaker, track) in &tracks {
         let wav = work_dir.join(format!(
             "{}.wav",
             if *speaker == Speaker::Me {
@@ -377,8 +405,7 @@ pub async fn transcribe_meeting(
                 "system"
             }
         ));
-        to_wav(m4a, &wav).await?;
-        wavs.push((*speaker, wav));
+        wavs.push((*speaker, to_wav(track, &wav).await?));
     }
 
     let vocabulary = Vocabulary::new(&settings.vocabulary, settings.builtin_vocabulary);

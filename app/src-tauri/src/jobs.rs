@@ -50,10 +50,10 @@ pub async fn run(app: AppHandle, mut jobs: UnboundedReceiver<Job>) {
     }
 }
 
-/// With "transcribe only when plugged in", hold the job until the Mac is on AC power.
+/// With "transcribe only when plugged in", hold the job until the machine is on AC power.
 async fn wait_for_power(app: &AppHandle, id: &str) {
     while state(app).settings().transcribe_when == "on_power" && !on_ac_power() {
-        report(app, id, "Waiting until the Mac is plugged in", 0.0);
+        report(app, id, "Waiting until the computer is plugged in", 0.0);
         tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
@@ -65,6 +65,23 @@ fn on_ac_power() -> bool {
         .output()
     {
         return String::from_utf8_lossy(&out.stdout).contains("'AC Power'");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+        let mut status = SYSTEM_POWER_STATUS {
+            ACLineStatus: 255,
+            BatteryFlag: 0,
+            BatteryLifePercent: 0,
+            SystemStatusFlag: 0,
+            BatteryLifeTime: 0,
+            BatteryFullLifeTime: 0,
+        };
+        // SAFETY: the struct is a plain C record that the call fills in.
+        if unsafe { GetSystemPowerStatus(&mut status) } != 0 {
+            // 0 = on battery, 1 = plugged in, 255 = unknown (a desktop: treat as plugged in).
+            return status.ACLineStatus != 0;
+        }
     }
     true
 }

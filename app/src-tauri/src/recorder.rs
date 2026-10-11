@@ -1,5 +1,5 @@
-//! Starts and stops the Swift recorder sidecar (`recorder-mac/`) and turns each recording
-//! into a meeting in the library.
+//! Starts and stops the recorder sidecar (`recorder-mac/` on macOS, `recorder-win/` on
+//! Windows; both speak the same JSON lines) and turns each recording into a meeting.
 
 use chrono::Local;
 use serde_json::{json, Value};
@@ -30,10 +30,24 @@ pub fn macos_version() -> Option<(u32, u32, String)> {
     None
 }
 
+/// Runs a helper program without flashing a console window on Windows.
+pub fn quiet(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Returns why recording can't work on this machine, if it can't.
 pub fn recording_blocker() -> Option<String> {
+    if cfg!(target_os = "windows") {
+        return None;
+    }
     if !cfg!(target_os = "macos") {
-        return Some("Recording is only available on macOS for now.".into());
+        return Some("Recording is only available on macOS and Windows.".into());
     }
     match macos_version() {
         Some((major, minor, text)) if (major, minor) < MIN_MACOS => Some(format!(
@@ -61,6 +75,19 @@ fn detect_call_app() -> String {
             return "Zoom".into();
         }
         if running.lines().any(|l| l.ends_with("/WhatsApp")) {
+            return "WhatsApp".into();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    if let Ok(out) = quiet(&mut std::process::Command::new("tasklist"))
+        .args(["/FO", "CSV", "/NH"])
+        .output()
+    {
+        let running = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
+        if running.contains("\"zoom.exe\"") {
+            return "Zoom".into();
+        }
+        if running.contains("\"whatsapp.exe\"") {
             return "WhatsApp".into();
         }
     }
@@ -92,7 +119,8 @@ pub fn start(app: &AppHandle, source_app: Option<String>) -> Result<(), String> 
     let folder = st.library().folder(&meeting.id)?;
 
     let mut args = vec!["--out".into(), folder.into_os_string()];
-    if record_video {
+    // Video and window titles come from the Mac recorder only.
+    if record_video && cfg!(target_os = "macos") {
         args.push("--video".into());
     }
     let (mut events, child) = app
@@ -160,6 +188,9 @@ pub fn start(app: &AppHandle, source_app: Option<String>) -> Result<(), String> 
 /// Combines a recording's screen.mp4 with its audio into video.mp4 (see `muxVideo` in the
 /// recorder), in the background. Does nothing when there's no separate video waiting.
 pub fn combine_video(app: &AppHandle, id: &str) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
     let Ok(folder) = state(app).library().folder(id) else {
         return;
     };

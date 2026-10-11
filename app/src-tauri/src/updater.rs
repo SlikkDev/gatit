@@ -3,9 +3,10 @@
 //! The check runs shortly after launch and every few hours after that. When a newer build is
 //! published, it is downloaded, its signature verified and the app on disk replaced quietly;
 //! the window shows a "Restart" banner and the menu bar gets a "Restart to update" item, so a
-//! recording in progress is never interrupted. Until the release carries a `latest.json`
-//! (which needs the updater key in the repository's secrets), the check finds nothing and
-//! stays silent.
+//! recording in progress is never interrupted. On Windows, installing means running the new
+//! installer, which closes the app, so there the download and install wait for that button.
+//! Until the release carries a `latest.json` (which needs the updater key in the repository's
+//! secrets), the check finds nothing and stays silent.
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -59,13 +60,25 @@ pub fn start(app: &AppHandle, menu: Menu<Wry>) {
     });
 }
 
-/// Downloads and installs a newer build if there is one, returning its version.
+/// Looks for a newer build and returns its version. On the Mac it is downloaded and installed
+/// right away; on Windows that happens in `restart`.
 async fn check(app: &AppHandle) -> Result<Option<String>, tauri_plugin_updater::Error> {
     let Some(update) = app.updater()?.check().await? else {
         return Ok(None);
     };
-    update.download_and_install(|_, _| {}, || {}).await?;
+    if cfg!(target_os = "macos") {
+        update.download_and_install(|_, _| {}, || {}).await?;
+    }
     Ok(Some(update.version))
+}
+
+/// Downloads the newer build and installs it. On Windows this runs the installer, which
+/// closes the app and opens the new one when it is done.
+async fn install(app: &AppHandle) -> Result<(), tauri_plugin_updater::Error> {
+    if let Some(update) = app.updater()?.check().await? {
+        update.download_and_install(|_, _| {}, || {}).await?;
+    }
+    Ok(())
 }
 
 /// Restarts into the installed update. Refused while a call is being recorded.
@@ -76,5 +89,15 @@ pub fn restart(app: &AppHandle) -> Result<(), String> {
     if recorder::is_recording(app) {
         return Err("Finish the recording first, then restart to update.".into());
     }
-    app.restart()
+    if cfg!(target_os = "macos") {
+        app.restart()
+    } else {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = install(&app).await {
+                eprintln!("update install: {e}");
+            }
+        });
+        Ok(())
+    }
 }

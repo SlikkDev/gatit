@@ -29,6 +29,8 @@ It prints the public key (replace `pubkey` in `tauri.conf.json` with it) and wri
 
 Updates are not signed by Apple unless the Apple secrets exist too; an ad-hoc-signed update replaces an ad-hoc-signed app just fine, since macOS only checks the signature on the first launch of a downloaded app.
 
+The Windows build gets an update package with the same key: `Gatit-windows-setup.exe` and its `.sig`, listed in `latest.json` as `windows-x86_64`. Installing there means running the new installer, which closes the app, so Gatit on Windows only downloads and runs it when you click **Restart**; the installer replaces the app and opens it again. There is no Microsoft signing yet (that needs a code-signing certificate), so a hand-installed build goes through SmartScreen's **More info → Run anyway** once.
+
 ## Apple Developer ID and notarization
 
 This needs the [Apple Developer Program](https://developer.apple.com/programs/enroll/) (99 USD a year). Enrollment as an individual takes a day or two to be approved. Then, on your Mac:

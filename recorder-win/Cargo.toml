@@ -1,0 +1,20 @@
+[package]
+name = "gatit-recorder"
+version = "0.1.0"
+edition = "2021"
+description = "Gatit's Windows recorder: microphone plus WASAPI loopback, as two 16 kHz WAV files"
+publish = false
+
+[[bin]]
+name = "gatit-recorder"
+path = "src/main.rs"
+
+[dependencies]
+hound = "3.5"
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.26"
+
+[profile.release]
+opt-level = 3

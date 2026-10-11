@@ -30,7 +30,7 @@
   <main id="main">
     <section id="empty" class="empty">
       <h2>No call selected</h2>
-      <p>When a call starts, Gatit asks whether to record it. You can also press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> at any time. Gatit records your microphone as "Me" and whatever the Mac plays as "Them", with no bot joining the call.</p>
+      <p id="empty-intro">When a call starts, Gatit asks whether to record it. You can also press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> at any time. Gatit records your microphone as "Me" and whatever your computer plays as "Them", with no bot joining the call.</p>
       <p id="empty-hint" class="muted"></p>
     </section>
 
@@ -96,7 +96,7 @@
       </label>
       <label>Start/stop shortcut
         <input id="s-shortcut" placeholder="Control+Alt+Super+R">
-        <small>Use Tauri key names, for example <code>Control+Alt+Super+R</code> (Super is the Command key).</small>
+        <small id="shortcut-help">Use Tauri key names, for example <code>Control+Alt+Super+R</code> (Super is the Command key).</small>
       </label>
       <label><input id="s-video" type="checkbox"> Also record the call's video (Zoom, Meet or WhatsApp window)</label>
 
@@ -110,14 +110,14 @@
       </label>
       <label>Hebrew model
         <select id="s-model">
-          <option value="compressed">Compressed (faster, recommended on Intel Macs)</option>
+          <option value="compressed">Compressed (faster, recommended on Intel Macs and Windows)</option>
           <option value="full">Full (slower, slightly more accurate)</option>
         </select>
       </label>
       <label>When to transcribe
         <select id="s-when">
           <option value="now">Right after the call</option>
-          <option value="on_power">When the Mac is plugged in</option>
+          <option value="on_power">When plugged in</option>
           <option value="manual">Only when I ask</option>
         </select>
       </label>

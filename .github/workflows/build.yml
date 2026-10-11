@@ -1,4 +1,4 @@
-name: Build (macOS)
+name: Build
 
 on:
   push:
@@ -13,28 +13,39 @@ env:
 
 jobs:
   test:
-    name: Rust tests (Linux)
+    name: Rust checks and tests (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: app/src-tauri
+          workspaces: |
+            app/src-tauri
+            recorder-win
       - name: Install Tauri's Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
-      - name: Format and lint
+      - name: App format and lint
         working-directory: app/src-tauri
         run: |
           cargo fmt --check
           cargo clippy --tests -- -D warnings
-      - name: Unit tests (transcript merge, Hebrew search, summary parsing)
+      - name: App unit tests (transcript merge, Hebrew search, summary parsing)
         working-directory: app/src-tauri
         run: cargo test
+      - name: Windows recorder format, lint (for Windows too) and tests
+        working-directory: recorder-win
+        run: |
+          cargo fmt --check
+          cargo clippy --tests -- -D warnings
+          cargo clippy --tests --target x86_64-pc-windows-msvc -- -D warnings
+          cargo test
 
-  build:
+  mac:
     name: Gatit.app (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -99,9 +110,54 @@ jobs:
             Gatit-macos-${{ matrix.slug }}.app.tar.gz.sig
             Gatit-macos-${{ matrix.slug }}.signing
 
+  windows:
+    name: Gatit installer (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            recorder-win
+      - name: Cache whisper.cpp build
+        uses: actions/cache@v4
+        with:
+          path: .build/whisper.cpp
+          key: whisper-cpp-x86_64-pc-windows-msvc-${{ hashFiles('scripts/build-whisper-windows.ps1') }}
+      - name: Build recorder
+        run: ./scripts/build-recorder-windows.ps1
+      - name: Build whisper.cpp
+        run: ./scripts/build-whisper-windows.ps1
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      # No Microsoft signing yet; the update package is signed with the same key as on the Mac.
+      - name: Expose the update signing key if it exists
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bash scripts/ci-export-secrets.sh TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Version the build (and sign the update package when the key exists)
+        shell: bash
+        run: bash scripts/ci-build-config.sh "$GATIT_VERSION" > build-config.json
+      - name: Build installer
+        working-directory: app/src-tauri
+        run: cargo tauri build --bundles nsis --config ../../build-config.json
+      - name: Collect the installer and the update signature
+        shell: bash
+        run: bash scripts/ci-collect-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gatit-windows
+          path: |
+            Gatit-windows-setup.exe
+            Gatit-windows-setup.exe.sig
+
   release:
     name: Publish downloads
-    needs: [test, build]
+    needs: [test, mac, windows]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
