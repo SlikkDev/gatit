@@ -35,7 +35,7 @@ Some places require telling the other people on a call that you are recording.
 
 ## Getting the app
 
-Every push to `main` publishes a build on the [latest release](https://github.com/SlikkDev/gatit/releases/latest) page. Download the one for your Mac (Apple menu → About This Mac shows the chip):
+The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/gatit/). Every push to `main` publishes a build on the [latest release](https://github.com/SlikkDev/gatit/releases/latest) page. Download the one for your Mac (Apple menu → About This Mac shows the chip):
 
 - **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip (M1 or later).
 - **Gatit-macos-intel.zip** for an Intel Mac, such as a 2019 MacBook Pro.
@@ -72,6 +72,7 @@ In development the permission prompts name your terminal app instead of Gatit.
 ## Layout
 
 - `recorder-mac/`: Swift command-line recorder. It uses a Core Audio process tap for system audio (no screen-recording permission and no purple indicator) and AVAudioEngine for the mic, and talks to the app over JSON lines on stdout. It finishes both files cleanly on stop, quit, or when the Mac goes to sleep. On start it also reports the call apps' window titles (`CallWindows.swift`). With `--video` it also records the call's window (the Zoom meeting, the browser window showing Meet, or WhatsApp) with ScreenCaptureKit, picking the window up again if it closes and reopens; after the call, `--mux` copies that video and both audio tracks, mixed, into one `video.mp4`. Run as `gatit-recorder --watch-calls`, it instead reports which call apps are using the microphone (`CallWatcher.swift`), which needs no permission.
+- `site/`: the one-page website, published to GitHub Pages by `.github/workflows/pages.yml` on every push to `main` that touches it.
 - `app/src-tauri/`: the Tauri 2 app.
   - `calls.rs` runs the call watcher and shows the "Record this call?" pop-up (`ui/prompt.html`).
   - `recorder.rs` starts and stops the recorder sidecar and files each recording as a meeting. `hints.rs` turns the window titles it reports into the call app and the people on the call.
@@ -85,3 +86,7 @@ In development the permission prompts name your terminal app instead of Gatit.
   - `models.json` lists the model downloads.
 - `app/ui/`: the window, plain HTML and JavaScript.
 - `scripts/`: builds for the Swift recorder and whisper.cpp, and the `ci-*.sh` helpers the GitHub Actions workflow uses to pick the signing identity, collect the downloads and write the update feed ([docs/signing.md](docs/signing.md)).
+
+## License
+
+[MIT](LICENSE).

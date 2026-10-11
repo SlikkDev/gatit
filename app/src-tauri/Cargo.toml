@@ -3,6 +3,7 @@ name = "gatit"
 version = "0.1.0"
 description = "Record, transcribe and summarize calls without a bot joining them"
 edition = "2021"
+license = "MIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -28,3 +29,8 @@ open = "5"
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Already pulled in by Tauri; used directly to turn the call pop-up into a non-activating panel.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSPanel", "NSWindow", "NSResponder", "NSGraphics"] }
