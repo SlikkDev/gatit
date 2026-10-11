@@ -66,9 +66,10 @@ private func bundleID(ofAudioProcess object: AudioObjectID) -> String? {
     var value: Unmanaged<CFString>?
     var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
     guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr,
-          let id = value?.takeRetainedValue() as String?, !id.isEmpty
+          let cfID = value?.takeRetainedValue()
     else { return nil }
-    return id
+    let id = cfID as String
+    return id.isEmpty ? nil : id
 }
 
 private func parentPID(of pid: pid_t) -> pid_t? {

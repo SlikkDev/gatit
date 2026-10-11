@@ -14,7 +14,7 @@ async function answer(record) {
   if (answered) return;
   answered = true;
   $("card").classList.add("leaving");
-  await new Promise((resolve) => setTimeout(resolve, 180));
+  await new Promise((resolve) => setTimeout(resolve, 120));
   await invoke("answer_call_prompt", { record });
 }
 
@@ -26,12 +26,14 @@ window.loadCall = async () => {
   remaining = TIMEOUT_MS;
 };
 
-function tick(now) {
+// A timer rather than requestAnimationFrame, which stops while the pop-up is on a Space
+// that isn't showing.
+function tick() {
+  const now = performance.now();
   if (lastTick != null && !hovering) remaining -= now - lastTick;
   lastTick = now;
   $("countdown").style.transform = `scaleX(${Math.max(0, remaining / TIMEOUT_MS)})`;
   if (remaining <= 0) answer(false);
-  else requestAnimationFrame(tick);
 }
 
 $("record").addEventListener("click", () => answer(true));
@@ -44,4 +46,5 @@ document.addEventListener("keydown", (e) => {
 });
 
 window.loadCall();
-requestAnimationFrame(tick);
+tick();
+setInterval(tick, 250);

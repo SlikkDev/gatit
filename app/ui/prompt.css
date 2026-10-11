@@ -19,11 +19,12 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(28, 28, 30, 0.35);
   overflow: hidden;
-  animation: enter 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+  animation: enter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.card.leaving { animation: leave 0.2s ease-in forwards; }
-@keyframes enter { from { opacity: 0; transform: translateX(24px) scale(0.98); } }
-@keyframes leave { to { opacity: 0; transform: translateX(16px); } }
+/* The blurred panel itself is native and can't animate, so only the content moves. */
+.card.leaving { animation: leave 0.12s ease-in forwards; }
+@keyframes enter { from { opacity: 0; transform: translateX(10px); } }
+@keyframes leave { to { opacity: 0; } }
 
 .glyph {
   flex: none;
@@ -61,4 +62,4 @@ button.record { background: #e5484d; color: white; }
 button.record:hover { background: #ec5d62; }
 
 .countdown { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
-.countdown div { height: 100%; width: 100%; background: rgba(255, 255, 255, 0.28); transform-origin: left; }
+.countdown div { height: 100%; width: 100%; background: rgba(255, 255, 255, 0.28); transform-origin: left; transition: transform 0.25s linear; }
