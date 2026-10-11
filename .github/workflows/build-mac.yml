@@ -70,3 +70,29 @@ jobs:
         with:
           name: Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}
           path: Gatit-macos-*.zip
+
+  release:
+    name: Publish downloads
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Gatit-*
+          path: dist
+          merge-multiple: true
+      - name: Replace the "latest" pre-release with this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l dist
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest dist/* \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Latest build" \
+            --notes "Built from commit ${GITHUB_SHA::7}. Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip or **Gatit-macos-intel.zip** for an Intel Mac. The app has only an ad-hoc signature, so macOS blocks the first launch: see [Getting the app](https://github.com/${GITHUB_REPOSITORY}#getting-the-app) for the two clicks that allow it."
