@@ -53,6 +53,7 @@
           <span id="progress-label"></span>
         </div>
         <div id="error" class="error" hidden></div>
+        <div id="drive-line" class="drive" hidden></div>
         <div class="actions">
           <button id="summarize">Summarize</button>
           <button id="copy-summary">Copy summary</button>
@@ -121,6 +122,26 @@
       <label><input id="s-auto" type="checkbox"> Summarize automatically after transcribing</label>
       <label>Claude model <input id="s-claude-model"></label>
       <button id="edit-prompt" class="link">Edit the summary instructions</button>
+
+      <h3>Google Drive</h3>
+      <div id="drive-connected" hidden>
+        <p id="drive-account"></p>
+        <label><input id="s-drive-upload" type="checkbox"> Upload every call to Google Drive automatically</label>
+        <small>Each call becomes a folder in your Drive, <code>Gatit / date / time and title</code>, holding the same files as the meetings folder. The folder is renamed when the title changes.</small>
+        <button id="drive-disconnect" class="link">Disconnect Google Drive</button>
+      </div>
+      <div id="drive-setup" hidden>
+        <p class="muted">Gatit uploads through your own Google Cloud project, so no one else's keys are involved. It only ever sees the files it created. <button id="drive-guide" class="link">Setup guide</button></p>
+        <label>OAuth client ID
+          <input id="s-drive-id" placeholder="….apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+        </label>
+        <label>OAuth client secret
+          <input id="s-drive-secret" type="password" autocomplete="off">
+          <small>Both are stored in the macOS Keychain. Signing in opens your browser.</small>
+        </label>
+        <button id="drive-connect">Connect Google Drive</button>
+        <small id="drive-message"></small>
+      </div>
 
       <div class="actions">
         <button id="save-settings" class="primary">Save</button>

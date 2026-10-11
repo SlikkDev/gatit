@@ -8,7 +8,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::library::{format_duration, Status};
 use crate::state::{library_changed, state, Job, JobProgress};
-use crate::{settings, summary, transcribe, transcript};
+use crate::{drive, settings, summary, transcribe, transcript};
 
 pub fn report(app: &AppHandle, id: &str, label: &str, percent: f64) {
     let progress = JobProgress {
@@ -44,6 +44,8 @@ pub async fn run(app: AppHandle, mut jobs: UnboundedReceiver<Job>) {
         }
         clear_report(&app);
         library_changed(&app, &id);
+        // The transcript or summary changed, so the Drive copy is behind.
+        drive::enqueue(&app, &id);
     }
 }
 

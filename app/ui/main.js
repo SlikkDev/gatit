@@ -11,6 +11,7 @@ const state = {
   recordingSince: null,
   recordingMeetingId: null,
   job: null,
+  driveJob: null,
   settings: null,
 };
 
@@ -248,6 +249,7 @@ function renderDetail() {
   $("transcribe").textContent = transcript ? "Re-transcribe" : "Transcribe";
   $("delete").disabled = meeting.status === "recording";
   renderProgress();
+  renderDriveLine();
 
   // Summary
   const box = $("summary");
@@ -305,6 +307,35 @@ listen("job", ({ payload }) => {
   renderProgress();
 });
 
+// One line under the title: uploading, uploaded (with a link), or what went wrong.
+function renderDriveLine() {
+  const line = $("drive-line");
+  line.replaceChildren();
+  if (state.detail) {
+    const { meeting, drive } = state.detail;
+    const job = state.driveJob && state.driveJob.id === meeting.id ? state.driveJob : null;
+    if (job) {
+      line.append(el("span", { text: `${job.label} · ${Math.round(job.percent)}%` }));
+    } else if (drive && drive.error) {
+      line.append(
+        el("span", { class: "bad", text: `Google Drive: ${drive.error}` }),
+        el("button", { class: "link", text: "Try again", onclick: () => invoke("upload_meeting", { id: meeting.id }).catch((e) => showError(String(e))) })
+      );
+    } else if (drive && drive.web_link) {
+      line.append(
+        el("span", { text: "Uploaded to Google Drive" }),
+        el("button", { class: "link", text: "Open in Drive", onclick: () => invoke("open_url", { url: drive.web_link }) })
+      );
+    }
+  }
+  line.hidden = !line.hasChildNodes();
+}
+
+listen("drive", ({ payload }) => {
+  state.driveJob = payload;
+  renderDriveLine();
+});
+
 $("title").addEventListener("change", () => invoke("update_meeting", { id: state.selected, changes: { title: $("title").value } }));
 $("title").addEventListener("keydown", (e) => { if (e.key === "Enter") $("title").blur(); });
 $("source-app").addEventListener("change", () => invoke("update_meeting", { id: state.selected, changes: { source_app: $("source-app").value } }));
@@ -332,7 +363,8 @@ $("copy-summary").addEventListener("click", async () => {
   setTimeout(() => ($("copy-summary").textContent = "Copy summary"), 1500);
 });
 $("delete").addEventListener("click", async () => {
-  if (!confirm(`Move "${state.detail.meeting.title}" to the Trash?`)) return;
+  const inDrive = state.detail.drive && state.detail.drive.web_link;
+  if (!confirm(`Move "${state.detail.meeting.title}" to the Trash?${inDrive ? " Its Google Drive copy goes to Drive's trash too." : ""}`)) return;
   try {
     await invoke("delete_meeting", { id: state.selected });
     state.selected = null;
@@ -439,8 +471,10 @@ async function openSettings() {
   $("s-auto").checked = s.auto_summarize;
   $("s-claude-model").value = s.claude_model;
   $("s-key").value = "";
+  $("s-drive-upload").checked = s.drive_upload;
   $("settings-message").textContent = "";
   await renderModels();
+  await renderDrive();
   const status = await invoke("app_status");
   $("key-status").textContent = status.has_api_key
     ? "A key is saved in the Keychain. Paste a new one to replace it, or type \"remove\" to delete it."
@@ -474,6 +508,43 @@ async function renderModels() {
   }
 }
 
+async function renderDrive() {
+  const account = await invoke("drive_status");
+  $("drive-connected").hidden = !account.connected;
+  $("drive-setup").hidden = account.connected;
+  if (account.connected) {
+    $("drive-account").textContent = `Connected as ${account.email || "your Google account"}.`;
+  } else {
+    $("s-drive-id").value = account.client_id || "";
+    $("s-drive-secret").value = "";
+    $("s-drive-secret").placeholder = account.has_client ? "Saved; paste again only to replace it" : "";
+    $("drive-message").textContent = account.has_client ? "Google asked for a new sign-in. Press Connect to sign in again." : "";
+  }
+}
+
+$("drive-connect").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  $("drive-message").textContent = "Finish signing in in your browser…";
+  try {
+    await invoke("drive_connect", { clientId: $("s-drive-id").value.trim(), clientSecret: $("s-drive-secret").value.trim() });
+    $("drive-message").textContent = "";
+    await renderDrive();
+  } catch (error) {
+    $("drive-message").textContent = String(error);
+  }
+  e.target.disabled = false;
+});
+$("drive-disconnect").addEventListener("click", async () => {
+  if (!confirm("Disconnect Google Drive? Calls already uploaded stay in your Drive.")) return;
+  try {
+    await invoke("drive_disconnect");
+    await renderDrive();
+  } catch (error) {
+    $("settings-message").textContent = String(error);
+  }
+});
+$("drive-guide").addEventListener("click", () => invoke("open_url", { url: "https://github.com/SlikkDev/gatit/blob/main/docs/google-drive.md" }));
+
 $("open-settings").addEventListener("click", openSettings);
 $("close-settings").addEventListener("click", () => {
   $("settings").hidden = true;
@@ -489,6 +560,7 @@ $("save-settings").addEventListener("click", async () => {
     vocabulary: textToVocab($("s-vocab").value),
     auto_summarize: $("s-auto").checked,
     claude_model: $("s-claude-model").value.trim() || state.settings.claude_model,
+    drive_upload: $("s-drive-upload").checked,
   };
   try {
     const key = $("s-key").value.trim();
@@ -515,6 +587,7 @@ $("open-folder").addEventListener("click", () => invoke("open_library_folder"));
     $("empty-hint").textContent = status.can_record;
   }
   state.job = status.job;
+  state.driveJob = status.drive_job;
   if (status.recording) {
     state.recordingSince = status.started_at_ms || Date.now();
     setRecording(true);
