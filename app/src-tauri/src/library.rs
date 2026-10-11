@@ -21,7 +21,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::summary::Summary;
-use crate::transcript::{to_text, Transcript};
+use crate::transcript::{to_text, Names, Transcript};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -55,6 +55,40 @@ pub struct Meeting {
     /// Set when the user edited the title, so a re-summary doesn't overwrite it.
     #[serde(default)]
     pub title_edited: bool,
+    /// The other people on the call, when known: typed in by hand, read off the call
+    /// app's window, or picked up by Claude from the conversation itself.
+    #[serde(default)]
+    pub participants: Vec<String>,
+    /// Set when the user edited the participants, so later guesses don't change them.
+    #[serde(default)]
+    pub participants_edited: bool,
+}
+
+impl Meeting {
+    /// Adds people that aren't listed yet (ignoring case and spacing). Returns whether
+    /// anything changed.
+    pub fn add_participants<'a>(&mut self, people: impl IntoIterator<Item = &'a str>) -> bool {
+        let mut changed = false;
+        for person in people {
+            let person = person.trim();
+            if person.is_empty() || self.participants.iter().any(|p| same_person(p, person)) {
+                continue;
+            }
+            self.participants.push(person.to_string());
+            changed = true;
+        }
+        changed
+    }
+}
+
+pub fn same_person(a: &str, b: &str) -> bool {
+    let key = |s: &str| {
+        s.split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    key(a) == key(b)
 }
 
 fn default_language() -> String {
@@ -64,16 +98,18 @@ fn default_language() -> String {
 pub struct Library {
     root: PathBuf,
     db: Connection,
+    /// The user's own name from Settings; "Me" in transcripts until it's set.
+    your_name: String,
 }
 
 impl Library {
-    pub fn open(root: PathBuf, db_path: &Path) -> Result<Self, String> {
+    pub fn open(root: PathBuf, db_path: &Path, your_name: &str) -> Result<Self, String> {
         std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
         let db = Connection::open(db_path).map_err(|e| e.to_string())?;
-        Self::with_connection(root, db)
+        Self::with_connection(root, db, your_name)
     }
 
-    fn with_connection(root: PathBuf, db: Connection) -> Result<Self, String> {
+    fn with_connection(root: PathBuf, db: Connection, your_name: &str) -> Result<Self, String> {
         db.execute_batch(
             "CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, json TEXT NOT NULL);
              -- Trigram tokenizer = substring search. Hebrew attaches prefixes (ה, ו, ב, ש...)
@@ -81,13 +117,46 @@ impl Library {
              CREATE VIRTUAL TABLE IF NOT EXISTS docs USING fts5(meeting_id UNINDEXED, kind UNINDEXED, body, tokenize = 'trigram');",
         )
         .map_err(|e| e.to_string())?;
-        let library = Self { root, db };
+        let library = Self {
+            root,
+            db,
+            your_name: your_name.trim().to_string(),
+        };
         library.rebuild_index()?;
         Ok(library)
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// How the two tracks of a meeting are labelled, given who is known to be on it.
+    pub fn names(&self, meeting: &Meeting) -> Names {
+        Names::new(&self.your_name, &meeting.participants)
+    }
+
+    /// Changes the user's own name and re-renders every meeting with it.
+    pub fn set_your_name(&mut self, your_name: &str) -> Result<(), String> {
+        let your_name = your_name.trim();
+        if your_name == self.your_name {
+            return Ok(());
+        }
+        self.your_name = your_name.to_string();
+        self.rebuild_index()?;
+        for meeting in self.list()? {
+            self.write_markdown(&meeting.id)?;
+        }
+        Ok(())
+    }
+
+    /// Re-renders the transcript's search text and meeting.md after the people on a
+    /// meeting changed, since the speaker labels come from them.
+    pub fn refresh(&mut self, id: &str) -> Result<(), String> {
+        if let Some(transcript) = self.transcript(id) {
+            let names = self.names(&self.get(id)?);
+            self.index_text(id, "transcript", &to_text(&transcript.segments, &names))?;
+        }
+        self.write_markdown(id)
     }
 
     pub fn folder(&self, id: &str) -> Result<PathBuf, String> {
@@ -116,6 +185,8 @@ impl Library {
             status: Status::Recording,
             error: None,
             title_edited: false,
+            participants: Vec::new(),
+            participants_edited: false,
         };
         self.save(&meeting)?;
         Ok(meeting)
@@ -139,7 +210,7 @@ impl Library {
                 params![meeting.id, json],
             )
             .map_err(|e| e.to_string())?;
-        self.index_text(&meeting.id, "title", &meeting.title)
+        self.index_text(&meeting.id, "title", &heading_text(meeting))
     }
 
     pub fn update(
@@ -178,7 +249,8 @@ impl Library {
     pub fn save_transcript(&mut self, id: &str, transcript: &Transcript) -> Result<(), String> {
         let json = serde_json::to_vec_pretty(transcript).map_err(|e| e.to_string())?;
         write_atomic(&self.folder(id)?.join("transcript.json"), &json)?;
-        self.index_text(id, "transcript", &to_text(&transcript.segments))?;
+        let names = self.names(&self.get(id)?);
+        self.index_text(id, "transcript", &to_text(&transcript.segments, &names))?;
         self.write_markdown(id)
     }
 
@@ -193,7 +265,7 @@ impl Library {
     pub fn write_markdown(&self, id: &str) -> Result<(), String> {
         let meeting = self.get(id)?;
         let mut md = format!(
-            "# {}\n\n{} · {}{}\n\n",
+            "# {}\n\n{} · {}{}{}\n\n",
             meeting.title,
             meeting.started_at.format("%A %-d %B %Y, %H:%M"),
             format_duration(meeting.duration_secs),
@@ -201,6 +273,11 @@ impl Library {
                 String::new()
             } else {
                 format!(" · {}", meeting.source_app)
+            },
+            if meeting.participants.is_empty() {
+                String::new()
+            } else {
+                format!(" · with {}", meeting.participants.join(", "))
             }
         );
         if let Some(summary) = self.summary(id) {
@@ -208,8 +285,9 @@ impl Library {
             md.push('\n');
         }
         if let Some(transcript) = self.transcript(id) {
+            let names = self.names(&meeting);
             md.push_str("## Transcript\n\n");
-            for line in to_text(&transcript.segments).lines() {
+            for line in to_text(&transcript.segments, &names).lines() {
                 md.push_str(line);
                 md.push_str("  \n");
             }
@@ -305,9 +383,10 @@ impl Library {
                     params![id, json],
                 )
                 .map_err(|e| e.to_string())?;
-            insert("title", &meeting.title).map_err(|e| e.to_string())?;
+            insert("title", &heading_text(&meeting)).map_err(|e| e.to_string())?;
             if let Some(t) = self.transcript(&id) {
-                insert("transcript", &to_text(&t.segments)).map_err(|e| e.to_string())?;
+                let names = self.names(&meeting);
+                insert("transcript", &to_text(&t.segments, &names)).map_err(|e| e.to_string())?;
             }
             if let Some(s) = self.summary(&id) {
                 insert("summary", &s.to_markdown()).map_err(|e| e.to_string())?;
@@ -315,6 +394,16 @@ impl Library {
         }
         Ok(())
     }
+}
+
+/// The searchable heading of a meeting: its title and who was on it.
+fn heading_text(meeting: &Meeting) -> String {
+    let mut text = meeting.title.clone();
+    for person in &meeting.participants {
+        text.push('\n');
+        text.push_str(person);
+    }
+    text
 }
 
 pub fn default_title(started_at: &DateTime<Local>, source_app: &str) -> String {
@@ -378,7 +467,7 @@ mod tests {
     fn temp_library(name: &str) -> Library {
         let root = std::env::temp_dir().join(format!("gatit-test-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        Library::with_connection(root, Connection::open_in_memory().unwrap()).unwrap()
+        Library::with_connection(root, Connection::open_in_memory().unwrap(), "").unwrap()
     }
 
     fn transcript(lines: &[&str]) -> Transcript {
@@ -429,9 +518,48 @@ mod tests {
         let root = lib.root().to_path_buf();
         drop(lib);
 
-        let lib = Library::with_connection(root, Connection::open_in_memory().unwrap()).unwrap();
+        let lib =
+            Library::with_connection(root, Connection::open_in_memory().unwrap(), "").unwrap();
         assert_eq!(lib.list().unwrap().len(), 1);
         assert_eq!(lib.search("cro project").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn labels_tracks_with_names_and_finds_people() {
+        let mut lib = temp_library("names");
+        let m = lib
+            .create(Local::now(), "Zoom".into(), "he".into())
+            .unwrap();
+        lib.save_transcript(&m.id, &transcript(&["שלום"])).unwrap();
+        let path = lib.folder(&m.id).unwrap().join("meeting.md");
+        let md = || std::fs::read_to_string(&path).unwrap();
+        assert!(md().contains("Them: שלום"));
+
+        // One known participant names the other track; the user's name replaces "Me".
+        lib.update(&m.id, |m| {
+            assert!(m.add_participants(["Dana Cohen"]));
+            assert!(!m.add_participants(["dana  cohen", ""]), "already listed");
+        })
+        .unwrap();
+        lib.refresh(&m.id).unwrap();
+        lib.set_your_name("Yarin").unwrap();
+        assert!(md().contains("with Dana Cohen"));
+        assert!(md().contains("Dana Cohen: שלום"));
+        assert_eq!(
+            lib.search("Dana").unwrap().len(),
+            1,
+            "people are searchable"
+        );
+        assert_eq!(lib.search("Cohen: שלום").unwrap().len(), 1);
+
+        // Two or more share the track, so it goes back to "Them".
+        lib.update(&m.id, |m| {
+            m.add_participants(["Avi"]);
+        })
+        .unwrap();
+        lib.refresh(&m.id).unwrap();
+        assert!(md().contains("Them: שלום"));
+        assert!(md().contains("with Dana Cohen, Avi"));
     }
 
     #[test]

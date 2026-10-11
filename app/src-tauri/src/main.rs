@@ -3,6 +3,7 @@
 
 mod commands;
 mod drive;
+mod hints;
 mod jobs;
 mod library;
 mod recorder;
@@ -52,8 +53,12 @@ fn main() {
 
             let settings_path = config_dir.join("settings.json");
             let settings = settings::load(&settings_path);
-            let library = Library::open(data_dir.join("meetings"), &data_dir.join("index.sqlite"))
-                .map_err(std::io::Error::other)?;
+            let library = Library::open(
+                data_dir.join("meetings"),
+                &data_dir.join("index.sqlite"),
+                &settings.your_name,
+            )
+            .map_err(std::io::Error::other)?;
 
             let toggle = MenuItem::with_id(app, "toggle", "Start recording", true, None::<&str>)?;
             let show = MenuItem::with_id(app, "show", "Open Gatit", true, None::<&str>)?;

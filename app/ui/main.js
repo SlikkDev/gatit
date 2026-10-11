@@ -82,6 +82,21 @@ function showError(message) {
   notice.hidden = !message;
 }
 
+// Who an action item belongs to: "me", a participant's name, or "them" when unknown.
+function ownerLabel(owner) {
+  const o = (owner || "").trim();
+  if (!o || o.toLowerCase() === "them") return "them";
+  if (o.toLowerCase() === "me") return "me";
+  return o;
+}
+
+// "Dana, Avi +2": the people on a call, short enough for the list.
+function peopleLabel(participants) {
+  if (!participants || participants.length === 0) return null;
+  const shown = participants.slice(0, 2).join(", ");
+  return participants.length > 2 ? `${shown} +${participants.length - 2}` : shown;
+}
+
 // ---------- recording ----------
 
 function setRecording(recording) {
@@ -164,7 +179,7 @@ function renderList() {
       lastDay = day;
     }
     const time = new Date(m.started_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-    const sub = [time, m.duration_secs ? fmtDuration(m.duration_secs) : null, m.source_app || null, m.status === "done" ? null : statusLabel(m)]
+    const sub = [time, m.duration_secs ? fmtDuration(m.duration_secs) : null, m.source_app || null, peopleLabel(m.participants), m.status === "done" ? null : statusLabel(m)]
       .filter(Boolean)
       .join(" · ");
     const button = el("button", { class: "meeting" + (m.id === state.selected ? " selected" : ""), onclick: () => select(m.id) }, [
@@ -223,11 +238,12 @@ function showEmpty() {
 }
 
 function renderDetail() {
-  const { meeting, transcript, summary, mic, system } = state.detail;
+  const { meeting, names, transcript, summary, mic, system } = state.detail;
   $("empty").hidden = true;
   $("detail").hidden = false;
 
   $("title").value = meeting.title;
+  $("participants").value = (meeting.participants || []).join(", ");
   const started = new Date(meeting.started_at);
   $("when").textContent =
     started.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) +
@@ -262,7 +278,7 @@ function renderDetail() {
     };
     list("Key points", summary.key_points);
     list("Decisions", summary.decisions);
-    list("Action items", summary.action_items, (a) => [a.text, el("span", { class: "owner", text: a.owner === "me" ? "me" : "them" })]);
+    list("Action items", summary.action_items, (a) => [a.text, el("span", { class: "owner", text: ownerLabel(a.owner) })]);
     list("Open questions", summary.open_questions);
     if (summary.model) box.append(el("p", { class: "model", text: `Written by ${summary.model}` }));
   } else if (meeting.status === "transcribed") {
@@ -274,11 +290,14 @@ function renderDetail() {
   area.replaceChildren();
   if (transcript && transcript.segments.length) {
     area.append(el("h3", { text: `Transcript · ${transcript.language === "en" ? "English" : "Hebrew"} · ${transcript.model}` }));
+    // The speaker column fits the longer of the two names, so lines stay aligned.
+    const longest = Math.max(names.me.length, names.them.length);
+    area.style.setProperty("--who", `${Math.min(160, Math.max(52, 10 + longest * 7))}px`);
     for (const seg of transcript.segments) {
       area.append(
         el("div", { class: "line " + seg.speaker, "data-start": seg.start, "data-end": seg.end, onclick: () => seekTo(seg.start) }, [
           el("span", { class: "time", text: fmtTime(seg.start) }),
-          el("span", { class: "who", text: seg.speaker === "me" ? "Me" : "Them" }),
+          el("span", { class: "who", text: names[seg.speaker] || seg.speaker, dir: "auto" }),
           el("span", { class: "text", text: seg.text }),
         ])
       );
@@ -339,6 +358,11 @@ listen("drive", ({ payload }) => {
 $("title").addEventListener("change", () => invoke("update_meeting", { id: state.selected, changes: { title: $("title").value } }));
 $("title").addEventListener("keydown", (e) => { if (e.key === "Enter") $("title").blur(); });
 $("source-app").addEventListener("change", () => invoke("update_meeting", { id: state.selected, changes: { source_app: $("source-app").value } }));
+$("participants").addEventListener("change", () => {
+  const participants = $("participants").value.split(",").map((s) => s.trim()).filter(Boolean);
+  invoke("update_meeting", { id: state.selected, changes: { participants } }).catch((e) => showError(String(e)));
+});
+$("participants").addEventListener("keydown", (e) => { if (e.key === "Enter") $("participants").blur(); });
 
 $("summarize").addEventListener("click", () => invoke("summarize_meeting", { id: state.selected }).catch((e) => showError(String(e))));
 $("transcribe").addEventListener("click", () =>
@@ -356,7 +380,7 @@ $("copy-summary").addEventListener("click", async () => {
   const section = (h, items, f = (x) => x) => { if (items && items.length) lines.push("", `## ${h}`, ...items.map((i) => `- ${f(i)}`)); };
   section("Key points", summary.key_points);
   section("Decisions", summary.decisions);
-  section("Action items", summary.action_items, (a) => `[ ] ${a.text} (${a.owner})`);
+  section("Action items", summary.action_items, (a) => `[ ] ${a.text} (${ownerLabel(a.owner)})`);
   section("Open questions", summary.open_questions);
   await invoke("copy_text", { text: lines.join("\n") });
   $("copy-summary").textContent = "Copied";
@@ -463,6 +487,7 @@ function textToVocab(text) {
 async function openSettings() {
   state.settings = await invoke("get_settings");
   const s = state.settings;
+  $("s-name").value = s.your_name || "";
   $("s-shortcut").value = s.shortcut;
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
@@ -548,11 +573,13 @@ $("drive-guide").addEventListener("click", () => invoke("open_url", { url: "http
 $("open-settings").addEventListener("click", openSettings);
 $("close-settings").addEventListener("click", () => {
   $("settings").hidden = true;
-  if (state.selected) renderDetail(); else showEmpty();
+  // Reload rather than re-render: a changed name relabels the transcript.
+  if (state.selected) loadDetail(); else showEmpty();
 });
 $("save-settings").addEventListener("click", async () => {
   const s = {
     ...state.settings,
+    your_name: $("s-name").value.trim(),
     shortcut: $("s-shortcut").value.trim(),
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,

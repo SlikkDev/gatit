@@ -964,6 +964,8 @@ mod tests {
             status: Status::Done,
             error: None,
             title_edited: false,
+            participants: vec![],
+            participants_edited: false,
         }
     }
 

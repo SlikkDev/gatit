@@ -10,7 +10,7 @@ pub const DEFAULT_MODEL: &str = "claude-opus-5-5";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ActionItem {
-    /// "me" or "them".
+    /// "me", the name of the participant who should do it, or "them" when unknown.
     pub owner: String,
     pub text: String,
 }
@@ -19,6 +19,9 @@ pub struct ActionItem {
 pub struct Summary {
     pub title: String,
     pub overview: String,
+    /// The other people on the call, by name, as Claude could tell from the conversation.
+    #[serde(default)]
+    pub participants: Vec<String>,
     #[serde(default)]
     pub key_points: Vec<String>,
     #[serde(default)]
@@ -48,17 +51,21 @@ impl Summary {
             "Action items",
             self.action_items
                 .iter()
-                .map(|a| {
-                    format!(
-                        "[ ] {} ({})",
-                        a.text,
-                        if a.owner == "me" { "me" } else { "them" }
-                    )
-                })
+                .map(|a| format!("[ ] {} ({})", a.text, owner_label(&a.owner)))
                 .collect(),
         );
         list("Open questions", self.open_questions.clone());
         md
+    }
+}
+
+/// Who an action item belongs to, as shown: "me" stays "me", a blank or unknown owner
+/// is "them", and anything else is the person's name.
+pub fn owner_label(owner: &str) -> &str {
+    match owner.trim() {
+        "" | "them" | "Them" => "them",
+        "me" | "Me" => "me",
+        name => name,
     }
 }
 
@@ -69,6 +76,11 @@ fn schema() -> Value {
         "properties": {
             "title": { "type": "string" },
             "overview": { "type": "string" },
+            "participants": {
+                "type": "array",
+                "description": "The other people on the call (not the person who recorded it), by name, in English letters. Empty when nobody can be named.",
+                "items": { "type": "string" }
+            },
             "key_points": strings,
             "decisions": strings,
             "action_items": {
@@ -76,7 +88,10 @@ fn schema() -> Value {
                 "items": {
                     "type": "object",
                     "properties": {
-                        "owner": { "type": "string", "enum": ["me", "them"] },
+                        "owner": {
+                            "type": "string",
+                            "description": "\"me\" for the person who recorded the call, the name of the participant who should do it, or \"them\" when it is someone else whose name is unknown."
+                        },
                         "text": { "type": "string" }
                     },
                     "required": ["owner", "text"],
@@ -85,7 +100,7 @@ fn schema() -> Value {
             },
             "open_questions": strings
         },
-        "required": ["title", "overview", "key_points", "decisions", "action_items", "open_questions"],
+        "required": ["title", "overview", "participants", "key_points", "decisions", "action_items", "open_questions"],
         "additionalProperties": false
     })
 }
@@ -206,16 +221,28 @@ mod tests {
             "stop_reason": "end_turn",
             "content": [
                 { "type": "thinking", "thinking": "" },
-                { "type": "text", "text": r#"{"title":"Pricing call with Dana","overview":"We agreed on pricing.","key_points":["Price is 10k"],"decisions":["Go with plan B"],"action_items":[{"owner":"me","text":"Send the contract by Thursday"}],"open_questions":[]}"# }
+                { "type": "text", "text": r#"{"title":"Pricing call with Dana","overview":"We agreed on pricing.","participants":["Dana Cohen"],"key_points":["Price is 10k"],"decisions":["Go with plan B"],"action_items":[{"owner":"me","text":"Send the contract by Thursday"},{"owner":"Dana Cohen","text":"Share the deck"},{"owner":"them","text":"Pick a date"}],"open_questions":[]}"# }
             ]
         });
         let summary = parse_response(&response).unwrap();
         assert_eq!(summary.title, "Pricing call with Dana");
+        assert_eq!(summary.participants, vec!["Dana Cohen"]);
         assert_eq!(summary.action_items[0].owner, "me");
         assert_eq!(summary.model, "claude-opus-5-5");
         let md = summary.to_markdown();
         assert!(md.contains("- [ ] Send the contract by Thursday (me)"));
+        assert!(md.contains("- [ ] Share the deck (Dana Cohen)"));
+        assert!(md.contains("- [ ] Pick a date (them)"));
         assert!(!md.contains("Open questions"));
+    }
+
+    #[test]
+    fn reads_summaries_written_before_participants_existed() {
+        let summary: Summary =
+            serde_json::from_str(r#"{"title":"Old call","overview":"Nothing much."}"#).unwrap();
+        assert!(summary.participants.is_empty());
+        assert_eq!(owner_label(""), "them");
+        assert_eq!(owner_label(" Me "), "me");
     }
 
     #[test]

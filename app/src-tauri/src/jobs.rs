@@ -6,8 +6,9 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::library::{format_duration, Status};
+use crate::library::{format_duration, same_person, Meeting, Status};
 use crate::state::{library_changed, state, Job, JobProgress};
+use crate::transcript::Names;
 use crate::{drive, settings, summary, transcribe, transcript};
 
 pub fn report(app: &AppHandle, id: &str, label: &str, percent: f64) {
@@ -106,11 +107,14 @@ async fn summarize(app: &AppHandle, id: &str) -> Result<(), String> {
     let st = state(app);
     let key = settings::api_key().ok_or("Add your Claude API key in Settings to get summaries.")?;
     let settings = st.settings();
-    let (meeting, transcript) = {
+    let (meeting, transcript, names) = {
         let lib = st.library();
+        let meeting = lib.get(id)?;
+        let names = lib.names(&meeting);
         (
-            lib.get(id)?,
+            meeting,
             lib.transcript(id).ok_or("Transcribe this meeting first.")?,
+            names,
         )
     };
     if transcript.segments.is_empty() {
@@ -123,7 +127,43 @@ async fn summarize(app: &AppHandle, id: &str) -> Result<(), String> {
     library_changed(app, id);
     report(app, id, "Writing the summary", 50.0);
 
-    let context = format!(
+    let context = summary_context(&meeting, &names);
+    let prompt = summary_prompt(app);
+    let summary = summary::summarize(
+        &key,
+        &settings.claude_model,
+        &prompt,
+        &context,
+        &transcript::to_text(&transcript.segments, &names),
+    )
+    .await?;
+    let mut lib = st.library();
+    lib.save_summary(id, &summary)?;
+    let your_name = settings.your_name.trim();
+    lib.update(id, |m| {
+        if !m.title_edited && !summary.title.trim().is_empty() {
+            m.title = summary.title.trim().to_string();
+        }
+        // People Claude heard on the call join the list, unless the user set it by hand.
+        if !m.participants_edited {
+            m.add_participants(
+                summary
+                    .participants
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|p| your_name.is_empty() || !same_person(p, your_name)),
+            );
+        }
+        m.status = Status::Done;
+    })?;
+    // The transcript labels may have changed with the people on the call.
+    lib.refresh(id)
+}
+
+/// What Claude is told about the call before the transcript: when it was, how long, which
+/// app, who recorded it and who else was on it, and how each of them is labelled.
+pub fn summary_context(meeting: &Meeting, names: &Names) -> String {
+    let mut context = format!(
         "Call recorded {}, {} long{}.",
         meeting.started_at.format("%A %-d %B %Y at %H:%M"),
         format_duration(meeting.duration_secs),
@@ -133,24 +173,31 @@ async fn summarize(app: &AppHandle, id: &str) -> Result<(), String> {
             format!(", on {}", meeting.source_app)
         }
     );
-    let prompt = summary_prompt(app);
-    let summary = summary::summarize(
-        &key,
-        &settings.claude_model,
-        &prompt,
-        &context,
-        &transcript::to_text(&transcript.segments),
-    )
-    .await?;
-    let mut lib = st.library();
-    lib.save_summary(id, &summary)?;
-    lib.update(id, |m| {
-        if !m.title_edited && !summary.title.trim().is_empty() {
-            m.title = summary.title.trim().to_string();
-        }
-        m.status = Status::Done;
-    })?;
-    lib.write_markdown(id)
+    if names.me == "Me" {
+        context.push_str(" The person who recorded it is labelled \"Me\".");
+    } else {
+        context.push_str(&format!(
+            " It was recorded by {}, labelled \"{}\".",
+            names.me, names.me
+        ));
+    }
+    let others: Vec<&str> = meeting
+        .participants
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect();
+    match others.as_slice() {
+        [] => context.push_str(" Everyone else on the call is labelled \"Them\"."),
+        [only] => context.push_str(&format!(
+            " The other person on the call is {only}, labelled \"{only}\"."
+        )),
+        _ => context.push_str(&format!(
+            " The other people on the call are {}; they share the label \"Them\".",
+            others.join(", ")
+        )),
+    }
+    context
 }
 
 /// The summary instructions: the user's editable copy if there is one, else the default.
@@ -194,5 +241,49 @@ pub fn resume_pending(app: &AppHandle) {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn meeting(participants: &[&str]) -> Meeting {
+        Meeting {
+            id: "2026-10-11 14-03-22".into(),
+            title: "Zoom at 14:03".into(),
+            started_at: chrono::Local
+                .with_ymd_and_hms(2026, 10, 11, 14, 3, 22)
+                .unwrap(),
+            duration_secs: 1500.0,
+            source_app: "Zoom".into(),
+            language: "he".into(),
+            status: Status::Transcribed,
+            error: None,
+            title_edited: false,
+            participants: participants.iter().map(|p| p.to_string()).collect(),
+            participants_edited: false,
+        }
+    }
+
+    #[test]
+    fn context_tells_claude_who_is_who() {
+        let m = meeting(&[]);
+        let unknown = summary_context(&m, &Names::new("", &m.participants));
+        assert!(unknown
+            .starts_with("Call recorded Sunday 11 October 2026 at 14:03, 25 min long, on Zoom."));
+        assert!(unknown.contains("labelled \"Me\""));
+        assert!(unknown.contains("Everyone else on the call is labelled \"Them\""));
+
+        let m = meeting(&["Dana Cohen"]);
+        let one = summary_context(&m, &Names::new("Yarin", &m.participants));
+        assert!(one.contains("recorded by Yarin, labelled \"Yarin\""));
+        assert!(one.contains("The other person on the call is Dana Cohen, labelled \"Dana Cohen\""));
+
+        let m = meeting(&["Dana", "Avi"]);
+        let group = summary_context(&m, &Names::new("Yarin", &m.participants));
+        assert!(group
+            .contains("The other people on the call are Dana, Avi; they share the label \"Them\""));
     }
 }
