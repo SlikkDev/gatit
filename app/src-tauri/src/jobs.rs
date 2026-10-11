@@ -223,6 +223,8 @@ pub fn resume_pending(app: &AppHandle) {
     let settings = st.settings();
     let meetings = st.library().list().unwrap_or_default();
     for m in meetings {
+        // A recording whose video wasn't combined with its audio yet, if the app quit first.
+        crate::recorder::combine_video(app, &m.id);
         match m.status {
             Status::Recording => {
                 // The app quit or crashed mid-recording. Keep whatever audio made it to disk.

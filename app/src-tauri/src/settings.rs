@@ -15,6 +15,8 @@ pub struct Settings {
     pub your_name: String,
     /// Global start/stop shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
+    /// Also record the call app's window (Zoom, Meet, WhatsApp) as video.
+    pub record_video: bool,
     /// Language for new meetings: "he", "en" or "auto".
     pub default_language: String,
     /// "compressed" (quantized, faster, the default on Intel Macs) or "full".
@@ -36,6 +38,7 @@ impl Default for Settings {
         Self {
             your_name: String::new(),
             shortcut: default_shortcut().into(),
+            record_video: true,
             default_language: "he".into(),
             hebrew_model: if cfg!(target_arch = "x86_64") {
                 "compressed"
@@ -128,6 +131,7 @@ mod tests {
         assert_eq!(s.default_language, "en");
         assert_eq!(s.your_name, "");
         assert_eq!(s.transcribe_when, "now");
+        assert!(s.record_video);
         assert!(s.builtin_vocabulary);
         assert!(s.vocabulary.is_empty());
     }
