@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_shell::process::CommandChild;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::drive::Drive;
 use crate::library::Library;
 use crate::settings::Settings;
 
@@ -57,6 +58,7 @@ pub struct AppState {
     pub progress: Mutex<Option<JobProgress>>,
     /// The call the "Record this call?" pop-up is asking about.
     pub pending_call: Mutex<Option<crate::calls::CallInfo>>,
+    pub drive: Drive,
 }
 
 impl AppState {
