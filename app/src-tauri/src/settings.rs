@@ -1,5 +1,5 @@
 //! User settings, stored as settings.json in the app's config folder. The Claude API key is
-//! not a setting: it lives in the macOS Keychain (Windows Credential Manager later).
+//! not a setting: it lives in the macOS Keychain or the Windows Credential Manager.
 
 use std::path::Path;
 
@@ -16,7 +16,7 @@ pub struct Settings {
     pub shortcut: String,
     /// Language for new meetings: "he", "en" or "auto".
     pub default_language: String,
-    /// "compressed" (quantized, faster, the default on Intel Macs) or "full".
+    /// "compressed" (quantized, faster, the default on Intel Macs and Windows) or "full".
     pub hebrew_model: String,
     /// "now" (right after recording), "on_power" (wait until plugged in) or "manual".
     pub transcribe_when: String,

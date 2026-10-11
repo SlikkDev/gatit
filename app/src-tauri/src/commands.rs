@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::library::{Meeting, Status};
@@ -22,7 +23,10 @@ pub struct AppStatus {
     started_at_ms: Option<i64>,
     job: Option<crate::state::JobProgress>,
     can_record: Option<String>,
-    macos: Option<String>,
+    /// "macos" or "windows".
+    platform: &'static str,
+    /// What to show as the system, like "macOS 15.1" or "Windows".
+    os: String,
     arch: &'static str,
     has_api_key: bool,
 }
@@ -45,7 +49,12 @@ pub fn app_status(app: AppHandle) -> AppStatus {
         started_at_ms,
         job,
         can_record: recorder::recording_blocker(),
-        macos: recorder::macos_version().map(|v| v.2),
+        platform: std::env::consts::OS,
+        os: match recorder::macos_version() {
+            Some((_, _, version)) => format!("macOS {version}"),
+            None if cfg!(target_os = "windows") => "Windows".into(),
+            None => std::env::consts::OS.into(),
+        },
         arch: std::env::consts::ARCH,
         has_api_key: settings::api_key().is_some(),
     }
@@ -81,15 +90,14 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
     let st = state(&app);
     let lib = st.library();
     let folder = lib.folder(&id)?;
-    let existing = |name: &str| Some(folder.join(name)).filter(|p| p.exists());
     let meeting = lib.get(&id)?;
     Ok(MeetingDetail {
         names: lib.names(&meeting),
         meeting,
         transcript: lib.transcript(&id),
         summary: lib.summary(&id),
-        mic: existing("mic.m4a"),
-        system: existing("system.m4a"),
+        mic: transcribe::track_file(&folder, "mic"),
+        system: transcribe::track_file(&folder, "system"),
     })
 }
 
@@ -206,10 +214,13 @@ fn open_path(path: &std::path::Path, reveal: bool) -> Result<(), String> {
         c.arg(path);
         c
     };
-    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+    recorder::quiet(&mut cmd)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
-/// Shows the meeting's Markdown export in Finder.
+/// Shows the meeting's Markdown export in Finder or Explorer.
 #[tauri::command]
 pub fn reveal_meeting(app: AppHandle, id: String) -> Result<(), String> {
     let st = state(&app);
@@ -225,25 +236,8 @@ pub fn open_library_folder(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn copy_text(text: String) -> Result<(), String> {
-    use std::io::Write;
-    let program = if cfg!(target_os = "windows") {
-        "clip"
-    } else {
-        "pbcopy"
-    };
-    let mut child = std::process::Command::new(program)
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    child
-        .stdin
-        .take()
-        .ok_or("no stdin")?
-        .write_all(text.as_bytes())
-        .map_err(|e| e.to_string())?;
-    child.wait().map_err(|e| e.to_string())?;
-    Ok(())
+pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -332,14 +326,17 @@ pub fn open_summary_prompt(app: AppHandle) -> Result<(), String> {
         }
         std::fs::write(&path, crate::summary::DEFAULT_PROMPT).map_err(|e| e.to_string())?;
     }
-    if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-            .arg("-t")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        Ok(())
+    let mut cmd = if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg("-t");
+        c
+    } else if cfg!(target_os = "windows") {
+        std::process::Command::new("notepad")
     } else {
-        open_path(&path, false)
-    }
+        std::process::Command::new("xdg-open")
+    };
+    recorder::quiet(cmd.arg(&path))
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }

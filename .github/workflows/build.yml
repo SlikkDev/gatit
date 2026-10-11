@@ -1,4 +1,4 @@
-name: Build (macOS)
+name: Build
 
 on:
   push:
@@ -7,28 +7,39 @@ on:
 
 jobs:
   test:
-    name: Rust tests (Linux)
+    name: Rust checks and tests (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: app/src-tauri
+          workspaces: |
+            app/src-tauri
+            recorder-win
       - name: Install Tauri's Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
-      - name: Format and lint
+      - name: App format and lint
         working-directory: app/src-tauri
         run: |
           cargo fmt --check
           cargo clippy --tests -- -D warnings
-      - name: Unit tests (transcript merge, Hebrew search, summary parsing)
+      - name: App unit tests (transcript merge, Hebrew search, summary parsing)
         working-directory: app/src-tauri
         run: cargo test
+      - name: Windows recorder format, lint (for Windows too) and tests
+        working-directory: recorder-win
+        run: |
+          cargo fmt --check
+          cargo clippy --tests -- -D warnings
+          cargo clippy --tests --target x86_64-pc-windows-msvc -- -D warnings
+          cargo test
 
-  build:
+  mac:
     name: Gatit.app (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -71,9 +82,41 @@ jobs:
           name: Gatit-macos-${{ matrix.name == 'Intel' && 'intel' || 'apple-silicon' }}
           path: Gatit-macos-*.zip
 
+  windows:
+    name: Gatit installer (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            recorder-win
+      - name: Cache whisper.cpp build
+        uses: actions/cache@v4
+        with:
+          path: .build/whisper.cpp
+          key: whisper-cpp-x86_64-pc-windows-msvc-${{ hashFiles('scripts/build-whisper-windows.ps1') }}
+      - name: Build recorder
+        run: ./scripts/build-recorder-windows.ps1
+      - name: Build whisper.cpp
+        run: ./scripts/build-whisper-windows.ps1
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Build installer
+        working-directory: app/src-tauri
+        run: cargo tauri build --bundles nsis
+      - name: Collect installer
+        run: Copy-Item (Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1).FullName Gatit-windows-setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Gatit-windows
+          path: Gatit-windows-setup.exe
+
   release:
     name: Publish downloads
-    needs: [test, build]
+    needs: [test, mac, windows]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -95,4 +138,4 @@ jobs:
             --prerelease \
             --target "$GITHUB_SHA" \
             --title "Latest build" \
-            --notes "Built from commit ${GITHUB_SHA::7}. Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip or **Gatit-macos-intel.zip** for an Intel Mac. The app has only an ad-hoc signature, so macOS blocks the first launch: see [Getting the app](https://github.com/${GITHUB_REPOSITORY}#getting-the-app) for the two clicks that allow it."
+            --notes "Built from commit ${GITHUB_SHA::7}. Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip, **Gatit-macos-intel.zip** for an Intel Mac, or **Gatit-windows-setup.exe** for Windows. The builds are not signed by Apple or Microsoft, so the first launch needs a couple of extra clicks: see [Getting the app](https://github.com/${GITHUB_REPOSITORY}#getting-the-app)."

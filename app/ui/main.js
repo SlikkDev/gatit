@@ -467,10 +467,11 @@ async function openSettings() {
   $("settings-message").textContent = "";
   await renderModels();
   const status = await invoke("app_status");
+  const store = status.platform === "windows" ? "Windows Credential Manager" : "macOS Keychain";
   $("key-status").textContent = status.has_api_key
-    ? "A key is saved in the Keychain. Paste a new one to replace it, or type \"remove\" to delete it."
-    : "No key yet. Keys are stored in the macOS Keychain, never in a file.";
-  $("about").textContent = `macOS ${status.macos || "?"} · ${status.arch === "x86_64" ? "Intel" : status.arch}`;
+    ? `A key is saved in the ${store}. Paste a new one to replace it, or type "remove" to delete it.`
+    : `No key yet. Keys are stored in the ${store}, never in a file.`;
+  $("about").textContent = `${status.os} · ${status.arch === "x86_64" ? "Intel" : status.arch}`;
   $("empty").hidden = true;
   $("detail").hidden = true;
   $("settings").hidden = false;
@@ -523,7 +524,7 @@ $("save-settings").addEventListener("click", async () => {
     await invoke("save_settings", { settings: s });
     $("settings-message").textContent = "Saved.";
     $("s-key").value = "";
-    $("shortcut-hint").textContent = s.shortcut;
+    $("shortcut-hint").textContent = formatShortcut(s.shortcut, state.mac);
   } catch (error) {
     $("settings-message").textContent = String(error);
   }
@@ -533,10 +534,23 @@ $("open-folder").addEventListener("click", () => invoke("open_library_folder"));
 
 // ---------- startup ----------
 
+function formatShortcut(shortcut, mac) {
+  return mac
+    ? shortcut.replace("Super", "⌘").replace("Alt", "⌥").replace("Control", "⌃").replace("Shift", "⇧")
+    : shortcut.replace("Control", "Ctrl").replace("Super", "Win");
+}
+
 (async () => {
   const status = await invoke("app_status");
   const settings = await invoke("get_settings");
-  $("shortcut-hint").textContent = settings.shortcut.replace("Super", "⌘").replace("Alt", "⌥").replace("Control", "⌃").replace("Shift", "⇧");
+  const mac = status.platform !== "windows";
+  state.mac = mac;
+  $("shortcut-hint").textContent = formatShortcut(settings.shortcut, mac);
+  $("reveal").textContent = mac ? "Show in Finder" : "Show in Explorer";
+  if (!mac) {
+    $("s-shortcut").placeholder = "Control+Alt+Shift+R";
+    $("shortcut-help").textContent = "Use Tauri key names, for example Control+Alt+Shift+R.";
+  }
   if (status.can_record) {
     showError(status.can_record);
     $("empty-hint").textContent = status.can_record;
