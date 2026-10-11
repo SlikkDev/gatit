@@ -15,6 +15,8 @@ pub struct Settings {
     pub your_name: String,
     /// Global start/stop shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
+    /// Show a "Record this call?" pop-up when a Zoom, Meet or WhatsApp call starts.
+    pub ask_on_call: bool,
     /// Also record the call app's window (Zoom, Meet, WhatsApp) as video.
     pub record_video: bool,
     /// Language for new meetings: "he", "en" or "auto".
@@ -38,6 +40,7 @@ impl Default for Settings {
         Self {
             your_name: String::new(),
             shortcut: default_shortcut().into(),
+            ask_on_call: true,
             record_video: true,
             default_language: "he".into(),
             hebrew_model: if cfg!(target_arch = "x86_64") {
@@ -131,6 +134,7 @@ mod tests {
         assert_eq!(s.default_language, "en");
         assert_eq!(s.your_name, "");
         assert_eq!(s.transcribe_when, "now");
+        assert!(s.ask_on_call);
         assert!(s.record_video);
         assert!(s.builtin_vocabulary);
         assert!(s.vocabulary.is_empty());

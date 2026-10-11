@@ -56,6 +56,8 @@ pub struct AppState {
     pub jobs: UnboundedSender<Job>,
     pub queued: Mutex<HashSet<String>>,
     pub progress: Mutex<Option<JobProgress>>,
+    /// The call the "Record this call?" pop-up is asking about.
+    pub pending_call: Mutex<Option<crate::calls::CallInfo>>,
     pub drive: Drive,
 }
 

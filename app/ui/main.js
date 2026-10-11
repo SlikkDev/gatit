@@ -530,6 +530,7 @@ async function openSettings() {
   const s = state.settings;
   $("s-name").value = s.your_name || "";
   $("s-shortcut").value = s.shortcut;
+  $("s-ask").checked = s.ask_on_call;
   $("s-video").checked = s.record_video;
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
@@ -636,6 +637,7 @@ $("save-settings").addEventListener("click", async () => {
     ...state.settings,
     your_name: $("s-name").value.trim(),
     shortcut: $("s-shortcut").value.trim(),
+    ask_on_call: $("s-ask").checked,
     record_video: $("s-video").checked,
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,

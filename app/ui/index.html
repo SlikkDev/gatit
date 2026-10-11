@@ -29,7 +29,7 @@
   <main id="main">
     <section id="empty" class="empty">
       <h2>No call selected</h2>
-      <p>Press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> when a call starts. Gatit records your microphone as "Me" and whatever the Mac plays as "Them", with no bot joining the call.</p>
+      <p>When a call starts, Gatit asks whether to record it. You can also press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> at any time. Gatit records your microphone as "Me" and whatever the Mac plays as "Them", with no bot joining the call.</p>
       <p id="empty-hint" class="muted"></p>
     </section>
 
@@ -90,6 +90,9 @@
       </label>
 
       <h3>Recording</h3>
+      <label><input id="s-ask" type="checkbox"> Ask to record when a Zoom, Meet or WhatsApp call starts
+        <small>A small pop-up appears in the top-right corner. Gatit notices calls by which app is using the microphone; it never joins them.</small>
+      </label>
       <label>Start/stop shortcut
         <input id="s-shortcut" placeholder="Control+Alt+Super+R">
         <small>Use Tauri key names, for example <code>Control+Alt+Super+R</code> (Super is the Command key).</small>

@@ -4,6 +4,7 @@ import Foundation
 
 // gatit-recorder --out <folder> [--video]
 // gatit-recorder --mux <folder>
+// gatit-recorder --watch-calls   (see CallWatcher.swift)
 //
 // Records the microphone to <folder>/mic.m4a and system audio to <folder>/system.m4a
 // (and with --video, the call app's window to <folder>/screen.mp4) until it reads "stop" on stdin, receives SIGINT/SIGTERM, or the Mac is about to sleep. Progress is reported to
@@ -21,6 +22,9 @@ func fail(_ message: String) -> Never {
 }
 
 let arguments = CommandLine.arguments
+if arguments.contains("--watch-calls") {
+    runCallWatcher()
+}
 
 // --mux: combine a finished recording's screen.mp4 and audio into video.mp4, then exit.
 if let muxIndex = arguments.firstIndex(of: "--mux"), muxIndex + 1 < arguments.count {

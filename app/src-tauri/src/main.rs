@@ -1,6 +1,7 @@
 // Hide the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod calls;
 mod commands;
 mod drive;
 mod hints;
@@ -25,7 +26,7 @@ use tauri_plugin_global_shortcut::ShortcutState;
 use crate::library::Library;
 use crate::state::{AppState, Recording};
 
-fn show_window(app: &AppHandle) {
+pub(crate) fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -105,6 +106,7 @@ fn main() {
                 jobs: jobs_tx,
                 queued: Mutex::new(HashSet::new()),
                 progress: Mutex::new(None),
+                pending_call: Mutex::new(None),
                 drive: drive::Drive::new(uploads_tx),
             });
 
@@ -115,11 +117,15 @@ fn main() {
             tauri::async_runtime::spawn(drive::run(handle.clone(), uploads_rx));
             jobs::resume_pending(&handle);
             drive::resume(&handle);
+            calls::watch(&handle);
             Ok(())
         })
         // Closing the window keeps Gatit (and any recording) running in the menu bar.
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -149,6 +155,8 @@ fn main() {
             commands::drive_connect,
             commands::drive_disconnect,
             commands::upload_meeting,
+            calls::pending_call,
+            calls::answer_call_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Gatit");
