@@ -412,3 +412,9 @@ pub fn upload_meeting(app: AppHandle, id: String) -> Result<(), String> {
     drive::enqueue(&app, &id);
     Ok(())
 }
+
+/// The built-in Hebrew-English terms, grouped, for Settings to show.
+#[tauri::command]
+pub fn builtin_vocabulary() -> Vec<crate::vocabulary::BuiltinGroupInfo> {
+    crate::vocabulary::builtin_groups()
+}

@@ -105,4 +105,7 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.95em; }
 #settings label input:not([type=checkbox]), #settings label select { display: block; width: 100%; margin-top: 4px; }
 #settings small { display: block; color: var(--muted); margin-top: 4px; }
 .models { margin: 8px 0; font-size: 13px; }
+.vocab-list { margin: 4px 0 10px; font-size: 13px; }
+.vocab-list summary { cursor: pointer; color: var(--muted); }
+.vocab-list p { margin: 6px 0; }
 .models div { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
