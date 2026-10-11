@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod drive;
 mod hints;
 mod jobs;
 mod library;
@@ -94,6 +95,7 @@ fn main() {
                 .build(app)?;
 
             let (jobs_tx, jobs_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (uploads_tx, uploads_rx) = tokio::sync::mpsc::unbounded_channel();
             app.manage(AppState {
                 library: Mutex::new(library),
                 settings: Mutex::new(settings.clone()),
@@ -103,13 +105,16 @@ fn main() {
                 jobs: jobs_tx,
                 queued: Mutex::new(HashSet::new()),
                 progress: Mutex::new(None),
+                drive: drive::Drive::new(uploads_tx),
             });
 
             if let Err(e) = commands::register_shortcut(&handle, &settings.shortcut, None) {
                 eprintln!("{e}");
             }
             tauri::async_runtime::spawn(jobs::run(handle.clone(), jobs_rx));
+            tauri::async_runtime::spawn(drive::run(handle.clone(), uploads_rx));
             jobs::resume_pending(&handle);
+            drive::resume(&handle);
             Ok(())
         })
         // Closing the window keeps Gatit (and any recording) running in the menu bar.
@@ -139,6 +144,11 @@ fn main() {
             commands::download_model,
             commands::open_summary_prompt,
             commands::builtin_vocabulary,
+            commands::open_url,
+            commands::drive_status,
+            commands::drive_connect,
+            commands::drive_disconnect,
+            commands::upload_meeting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Gatit");

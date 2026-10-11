@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_shell::process::CommandChild;
 use tokio::sync::mpsc::UnboundedSender;
 
+use crate::drive::Drive;
 use crate::library::Library;
 use crate::settings::Settings;
 
@@ -55,6 +56,7 @@ pub struct AppState {
     pub jobs: UnboundedSender<Job>,
     pub queued: Mutex<HashSet<String>>,
     pub progress: Mutex<Option<JobProgress>>,
+    pub drive: Drive,
 }
 
 impl AppState {

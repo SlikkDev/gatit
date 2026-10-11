@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+use crate::drive;
 use crate::hints;
 use crate::library::{default_title, Status};
 use crate::state::{library_changed, state, Job};
@@ -230,6 +231,8 @@ fn finished(app: &AppHandle, id: &str, error: Option<String>) {
             if st.settings().transcribe_when != "manual" {
                 st.enqueue(Job::Process(id.to_string()));
             }
+            // The audio is complete: upload it now, long before transcription finishes.
+            drive::enqueue(app, id);
         }
         None => {
             // Never got going (for example a permission was denied): there's no audio to keep.
