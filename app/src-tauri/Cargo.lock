@@ -1060,21 +1060,27 @@ dependencies = [
 name = "gatit"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "futures-util",
+ "getrandom 0.3.4",
  "keyring",
+ "open",
  "regex",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-shell",
  "tokio",
+ "tokio-util",
  "trash",
+ "url",
  "windows-sys 0.59.0",
 ]
 

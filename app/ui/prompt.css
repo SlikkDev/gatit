@@ -1,0 +1,65 @@
+/* The window itself is a rounded, blurred macOS HUD panel; this page only draws on top of it. */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+body {
+  font: 13px/1.35 -apple-system, "Segoe UI", sans-serif;
+  color: #f5f5f7;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+.card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 0 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(28, 28, 30, 0.35);
+  overflow: hidden;
+  animation: enter 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* The blurred panel itself is native and can't animate, so only the content moves. */
+.card.leaving { animation: leave 0.12s ease-in forwards; }
+@keyframes enter { from { opacity: 0; transform: translateX(10px); } }
+@keyframes leave { to { opacity: 0; } }
+
+.glyph {
+  flex: none;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(229, 72, 77, 0.16);
+}
+.glyph span {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.6);
+  animation: pulse 1.8s ease-out infinite;
+}
+@keyframes pulse { 70% { box-shadow: 0 0 0 9px rgba(229, 72, 77, 0); } 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); } }
+
+.text { flex: 1; min-width: 0; }
+.title { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub { color: rgba(245, 245, 247, 0.62); font-size: 12px; margin-top: 1px; }
+
+.buttons { flex: none; display: flex; gap: 6px; }
+button {
+  font: inherit; font-weight: 500;
+  border: 0; border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: inherit;
+  transition: background 0.15s, transform 0.1s;
+}
+button:active { transform: scale(0.97); }
+button:focus { outline: none; }
+button.ghost { background: rgba(255, 255, 255, 0.1); }
+button.ghost:hover { background: rgba(255, 255, 255, 0.18); }
+button.record { background: #e5484d; color: white; }
+button.record:hover { background: #ec5d62; }
+
+.countdown { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+.countdown div { height: 100%; width: 100%; background: rgba(255, 255, 255, 0.28); transform-origin: left; transition: transform 0.25s linear; }

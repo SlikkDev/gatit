@@ -72,8 +72,12 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.95em; }
 .progress .bar { flex: 1; max-width: 320px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .progress .bar div { height: 100%; width: 0; background: var(--green); transition: width 0.3s; }
 .error { color: var(--accent); margin: 8px 0; }
+.drive { font-size: 13px; color: var(--muted); margin: 6px 0; }
+.drive .bad { color: var(--accent); }
+.drive button.link { padding: 0 4px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
 
+.video { display: block; width: 100%; max-height: 360px; background: #000; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
 .player { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .player .play { width: 36px; height: 36px; border-radius: 50%; padding: 0; }
 .player input[type=range] { flex: 1; padding: 0; border: 0; }

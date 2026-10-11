@@ -1,5 +1,6 @@
-//! User settings, stored as settings.json in the app's config folder. The Claude API key is
-//! not a setting: it lives in the macOS Keychain or the Windows Credential Manager.
+//! User settings, stored as settings.json in the app's config folder. Secrets (the Claude API
+//! key, the Google Drive sign-in) are not settings: they live in the macOS Keychain or the
+//! Windows Credential Manager.
 
 use std::path::Path;
 
@@ -14,6 +15,10 @@ pub struct Settings {
     pub your_name: String,
     /// Global start/stop shortcut, in Tauri accelerator syntax.
     pub shortcut: String,
+    /// Show a "Record this call?" pop-up when a Zoom, Meet or WhatsApp call starts.
+    pub ask_on_call: bool,
+    /// Also record the call app's window (Zoom, Meet, WhatsApp) as video.
+    pub record_video: bool,
     /// Language for new meetings: "he", "en" or "auto".
     pub default_language: String,
     /// "compressed" (quantized, faster, the default on Intel Macs and Windows) or "full".
@@ -26,6 +31,8 @@ pub struct Settings {
     pub builtin_vocabulary: bool,
     /// The user's own terms, on top of the built-in list.
     pub vocabulary: Vec<VocabTerm>,
+    /// Upload every call to Google Drive once the account is connected in Settings.
+    pub drive_upload: bool,
 }
 
 impl Default for Settings {
@@ -33,6 +40,8 @@ impl Default for Settings {
         Self {
             your_name: String::new(),
             shortcut: default_shortcut().into(),
+            ask_on_call: true,
+            record_video: true,
             default_language: "he".into(),
             hebrew_model: if cfg!(target_arch = "x86_64") {
                 "compressed"
@@ -45,6 +54,7 @@ impl Default for Settings {
             claude_model: crate::summary::DEFAULT_MODEL.into(),
             builtin_vocabulary: true,
             vocabulary: Vec::new(),
+            drive_upload: true,
         }
     }
 }
@@ -80,28 +90,38 @@ pub fn save(path: &Path, settings: &Settings) -> Result<(), String> {
 const KEYCHAIN_SERVICE: &str = "dev.slikk.gatit";
 const KEYCHAIN_ACCOUNT: &str = "anthropic-api-key";
 
-fn key_entry() -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())
+fn key_entry(account: &str) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, account).map_err(|e| e.to_string())
 }
 
-pub fn api_key() -> Option<String> {
-    key_entry()
+/// Reads one of Gatit's keychain items, or None when it isn't there (or is empty).
+pub fn secret(account: &str) -> Option<String> {
+    key_entry(account)
         .ok()?
         .get_password()
         .ok()
         .filter(|k| !k.trim().is_empty())
 }
 
-pub fn set_api_key(key: &str) -> Result<(), String> {
-    let entry = key_entry()?;
-    let key = key.trim();
-    if key.is_empty() {
+/// Stores a keychain item; an empty value deletes it.
+pub fn set_secret(account: &str, value: &str) -> Result<(), String> {
+    let entry = key_entry(account)?;
+    let value = value.trim();
+    if value.is_empty() {
         return match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
         };
     }
-    entry.set_password(key).map_err(|e| e.to_string())
+    entry.set_password(value).map_err(|e| e.to_string())
+}
+
+pub fn api_key() -> Option<String> {
+    secret(KEYCHAIN_ACCOUNT)
+}
+
+pub fn set_api_key(key: &str) -> Result<(), String> {
+    set_secret(KEYCHAIN_ACCOUNT, key)
 }
 
 #[cfg(test)]
@@ -114,6 +134,8 @@ mod tests {
         assert_eq!(s.default_language, "en");
         assert_eq!(s.your_name, "");
         assert_eq!(s.transcribe_when, "now");
+        assert!(s.ask_on_call);
+        assert!(s.record_video);
         assert!(s.builtin_vocabulary);
         assert!(s.vocabulary.is_empty());
     }

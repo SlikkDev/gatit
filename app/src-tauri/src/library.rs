@@ -1,14 +1,17 @@
-//! The meeting library. Each meeting is a plain folder of files, so the folders can later be
-//! synced between machines (Google Drive, after v1) by copying files:
+//! The meeting library. Each meeting is a plain folder of files, so the folders can be
+//! mirrored to Google Drive (see drive.rs) and later synced between machines by copying files:
 //!
 //! ```text
 //! meetings/2026-10-11 14-03-22/
 //!   meeting.json     title, time, length, app, language, status
 //!   mic.m4a          your side ("Me")
 //!   system.m4a       everyone else ("Them")
+//!   video.mp4        the call app's window with both sides mixed in, when video was recorded
+//!                    (screen.mp4 + screen.json until the two are combined after the call)
 //!   transcript.json  merged Me/Them transcript
 //!   summary.json     Claude's summary
 //!   meeting.md       readable export of all of the above
+//!   drive.json       what has been uploaded to Google Drive (local state, never uploaded)
 //! ```
 //!
 //! The SQLite search index is only a cache: it can always be rebuilt from the folders.

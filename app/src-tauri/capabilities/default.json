@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Lets the main window call the app's commands and listen for its events.",
-  "windows": ["main"],
+  "description": "Lets the main window and the call pop-up call the app's commands and listen for its events.",
+  "windows": ["main", "prompt"],
   "permissions": ["core:default"]
 }

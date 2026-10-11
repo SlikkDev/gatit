@@ -11,6 +11,7 @@ const state = {
   recordingSince: null,
   recordingMeetingId: null,
   job: null,
+  driveJob: null,
   settings: null,
 };
 
@@ -134,6 +135,9 @@ listen("recorder", ({ payload }) => {
       showError(payload.message);
       $("record").disabled = false;
       break;
+    case "notice":
+      showError(payload.message);
+      break;
     case "idle":
       setRecording(false);
       break;
@@ -237,7 +241,7 @@ function showEmpty() {
 }
 
 function renderDetail() {
-  const { meeting, names, transcript, summary, mic, system } = state.detail;
+  const { meeting, names, transcript, summary, mic, system, video, video_offset } = state.detail;
   $("empty").hidden = true;
   $("detail").hidden = false;
 
@@ -264,6 +268,7 @@ function renderDetail() {
   $("transcribe").textContent = transcript ? "Re-transcribe" : "Transcribe";
   $("delete").disabled = meeting.status === "recording";
   renderProgress();
+  renderDriveLine();
 
   // Summary
   const box = $("summary");
@@ -306,7 +311,7 @@ function renderDetail() {
     area.append(el("p", { class: "muted", text: "Not transcribed yet." }));
   }
 
-  setupPlayer(mic, system, meeting.duration_secs);
+  setupPlayer(mic, system, meeting.duration_secs, video, video_offset);
 }
 
 function renderProgress() {
@@ -322,6 +327,35 @@ function renderProgress() {
 listen("job", ({ payload }) => {
   state.job = payload;
   renderProgress();
+});
+
+// One line under the title: uploading, uploaded (with a link), or what went wrong.
+function renderDriveLine() {
+  const line = $("drive-line");
+  line.replaceChildren();
+  if (state.detail) {
+    const { meeting, drive } = state.detail;
+    const job = state.driveJob && state.driveJob.id === meeting.id ? state.driveJob : null;
+    if (job) {
+      line.append(el("span", { text: `${job.label} · ${Math.round(job.percent)}%` }));
+    } else if (drive && drive.error) {
+      line.append(
+        el("span", { class: "bad", text: `Google Drive: ${drive.error}` }),
+        el("button", { class: "link", text: "Try again", onclick: () => invoke("upload_meeting", { id: meeting.id }).catch((e) => showError(String(e))) })
+      );
+    } else if (drive && drive.web_link) {
+      line.append(
+        el("span", { text: "Uploaded to Google Drive" }),
+        el("button", { class: "link", text: "Open in Drive", onclick: () => invoke("open_url", { url: drive.web_link }) })
+      );
+    }
+  }
+  line.hidden = !line.hasChildNodes();
+}
+
+listen("drive", ({ payload }) => {
+  state.driveJob = payload;
+  renderDriveLine();
 });
 
 $("title").addEventListener("change", () => invoke("update_meeting", { id: state.selected, changes: { title: $("title").value } }));
@@ -356,7 +390,8 @@ $("copy-summary").addEventListener("click", async () => {
   setTimeout(() => ($("copy-summary").textContent = "Copy summary"), 1500);
 });
 $("delete").addEventListener("click", async () => {
-  if (!confirm(`Move "${state.detail.meeting.title}" to the Trash?`)) return;
+  const inDrive = state.detail.drive && state.detail.drive.web_link;
+  if (!confirm(`Move "${state.detail.meeting.title}" to the Trash?${inDrive ? " Its Google Drive copy goes to Drive's trash too." : ""}`)) return;
   try {
     await invoke("delete_meeting", { id: state.selected });
     state.selected = null;
@@ -373,13 +408,30 @@ const player = { tracks: [], duration: 0, timer: null };
 
 function stopPlayer() {
   for (const a of player.tracks) { a.pause(); a.src = ""; }
+  $("video").pause();
   player.tracks = [];
   clearInterval(player.timer);
   $("player").hidden = true;
 }
 
-function setupPlayer(mic, system, duration) {
+function setupPlayer(mic, system, duration, video, videoOffset) {
   stopPlayer();
+  // The video is muted and follows the audio tracks, which carry the sound.
+  const v = $("video");
+  player.video = video ? v : null;
+  player.videoOffset = videoOffset || 0;
+  v.hidden = !video;
+  if (video) {
+    if (v.dataset.path !== video) {
+      v.src = convertFileSrc(video);
+      v.dataset.path = video;
+    }
+    v.currentTime = 0;
+  } else {
+    v.removeAttribute("src");
+    delete v.dataset.path;
+    v.load();
+  }
   player.tracks = [mic, system].filter(Boolean).map((path) => {
     const audio = new Audio(convertFileSrc(path));
     audio.preload = "metadata";
@@ -403,6 +455,7 @@ function updatePlayerUi() {
   const t = player.tracks[0].currentTime;
   if (player.duration) $("seek").value = (t / player.duration) * 100;
   $("player-time").textContent = `${fmtTime(t)} / ${fmtTime(player.duration)}`;
+  syncVideo(t);
   let current = null;
   for (const line of $("transcript").querySelectorAll(".line")) {
     const hit = t >= +line.dataset.start && t < +line.dataset.end + 0.5;
@@ -413,12 +466,29 @@ function updatePlayerUi() {
 
 function seekTo(seconds) {
   for (const a of player.tracks) a.currentTime = seconds;
+  syncVideo(seconds, true);
   play();
+}
+
+// Keeps the video at the audio's position; it's blank until the call window appeared.
+function syncVideo(t, force) {
+  const v = player.video;
+  if (!v) return;
+  const target = t - player.videoOffset;
+  const playing = player.tracks.length && !player.tracks[0].paused;
+  if (target < 0 || (isFinite(v.duration) && target > v.duration)) {
+    if (!v.paused) v.pause();
+    return;
+  }
+  if (force || Math.abs(v.currentTime - target) > 0.4) v.currentTime = target;
+  if (playing && v.paused) v.play().catch(() => {});
+  if (!playing && !v.paused) v.pause();
 }
 
 function play() {
   for (const a of player.tracks) a.play().catch(() => {});
   $("play").textContent = "⏸";
+  if (player.tracks.length) syncVideo(player.tracks[0].currentTime, true);
 }
 
 $("play").addEventListener("click", () => {
@@ -426,12 +496,15 @@ $("play").addEventListener("click", () => {
   if (player.tracks[0].paused) play();
   else {
     for (const a of player.tracks) a.pause();
+    if (player.video) player.video.pause();
     $("play").textContent = "▶";
   }
 });
+$("video").addEventListener("click", () => $("play").click());
 $("seek").addEventListener("input", () => {
   const t = ($("seek").value / 100) * player.duration;
   for (const a of player.tracks) a.currentTime = t;
+  syncVideo(t, true);
 });
 
 // ---------- settings ----------
@@ -457,6 +530,8 @@ async function openSettings() {
   const s = state.settings;
   $("s-name").value = s.your_name || "";
   $("s-shortcut").value = s.shortcut;
+  $("s-ask").checked = s.ask_on_call;
+  $("s-video").checked = s.record_video;
   $("s-language").value = s.default_language;
   $("s-model").value = s.hebrew_model;
   $("s-when").value = s.transcribe_when;
@@ -466,8 +541,10 @@ async function openSettings() {
   $("s-auto").checked = s.auto_summarize;
   $("s-claude-model").value = s.claude_model;
   $("s-key").value = "";
+  $("s-drive-upload").checked = s.drive_upload;
   $("settings-message").textContent = "";
   await renderModels();
+  await renderDrive();
   const status = await invoke("app_status");
   const store = status.platform === "windows" ? "Windows Credential Manager" : "macOS Keychain";
   $("key-status").textContent = status.has_api_key
@@ -513,6 +590,43 @@ async function renderModels() {
   }
 }
 
+async function renderDrive() {
+  const account = await invoke("drive_status");
+  $("drive-connected").hidden = !account.connected;
+  $("drive-setup").hidden = account.connected;
+  if (account.connected) {
+    $("drive-account").textContent = `Connected as ${account.email || "your Google account"}.`;
+  } else {
+    $("s-drive-id").value = account.client_id || "";
+    $("s-drive-secret").value = "";
+    $("s-drive-secret").placeholder = account.has_client ? "Saved; paste again only to replace it" : "";
+    $("drive-message").textContent = account.has_client ? "Google asked for a new sign-in. Press Connect to sign in again." : "";
+  }
+}
+
+$("drive-connect").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  $("drive-message").textContent = "Finish signing in in your browser…";
+  try {
+    await invoke("drive_connect", { clientId: $("s-drive-id").value.trim(), clientSecret: $("s-drive-secret").value.trim() });
+    $("drive-message").textContent = "";
+    await renderDrive();
+  } catch (error) {
+    $("drive-message").textContent = String(error);
+  }
+  e.target.disabled = false;
+});
+$("drive-disconnect").addEventListener("click", async () => {
+  if (!confirm("Disconnect Google Drive? Calls already uploaded stay in your Drive.")) return;
+  try {
+    await invoke("drive_disconnect");
+    await renderDrive();
+  } catch (error) {
+    $("settings-message").textContent = String(error);
+  }
+});
+$("drive-guide").addEventListener("click", () => invoke("open_url", { url: "https://github.com/SlikkDev/gatit/blob/main/docs/google-drive.md" }));
+
 $("open-settings").addEventListener("click", openSettings);
 $("close-settings").addEventListener("click", () => {
   $("settings").hidden = true;
@@ -524,6 +638,8 @@ $("save-settings").addEventListener("click", async () => {
     ...state.settings,
     your_name: $("s-name").value.trim(),
     shortcut: $("s-shortcut").value.trim(),
+    ask_on_call: $("s-ask").checked,
+    record_video: $("s-video").checked,
     default_language: $("s-language").value,
     hebrew_model: $("s-model").value,
     transcribe_when: $("s-when").value,
@@ -531,6 +647,7 @@ $("save-settings").addEventListener("click", async () => {
     vocabulary: textToVocab($("s-vocab").value),
     auto_summarize: $("s-auto").checked,
     claude_model: $("s-claude-model").value.trim() || state.settings.claude_model,
+    drive_upload: $("s-drive-upload").checked,
   };
   try {
     const key = $("s-key").value.trim();
@@ -559,17 +676,23 @@ function formatShortcut(shortcut, mac) {
   const settings = await invoke("get_settings");
   const mac = status.platform !== "windows";
   state.mac = mac;
-  $("shortcut-hint").textContent = formatShortcut(settings.shortcut, mac);
   $("reveal").textContent = mac ? "Show in Finder" : "Show in Explorer";
   if (!mac) {
     $("s-shortcut").placeholder = "Control+Alt+Shift+R";
     $("shortcut-help").textContent = "Use Tauri key names, for example Control+Alt+Shift+R.";
+    // The call pop-up and call video come from the Mac recorder only.
+    $("s-ask").closest("label").hidden = true;
+    $("s-video").closest("label").hidden = true;
+    $("empty-intro").innerHTML =
+      'Press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> when a call starts. Gatit records your microphone as "Me" and whatever your computer plays as "Them", with no bot joining the call.';
   }
+  $("shortcut-hint").textContent = formatShortcut(settings.shortcut, mac);
   if (status.can_record) {
     showError(status.can_record);
     $("empty-hint").textContent = status.can_record;
   }
   state.job = status.job;
+  state.driveJob = status.drive_job;
   if (status.recording) {
     state.recordingSince = status.started_at_ms || Date.now();
     setRecording(true);

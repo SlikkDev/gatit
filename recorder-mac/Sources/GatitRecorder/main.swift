@@ -1,10 +1,13 @@
 import AppKit
+import CoreMedia
 import Foundation
 
-// gatit-recorder --out <folder>
+// gatit-recorder --out <folder> [--video]
+// gatit-recorder --mux <folder>
+// gatit-recorder --watch-calls   (see CallWatcher.swift)
 //
 // Records the microphone to <folder>/mic.m4a and system audio to <folder>/system.m4a
-// until it reads "stop" on stdin, receives SIGINT/SIGTERM, or the Mac is about to sleep. Progress is reported to
+// (and with --video, the call app's window to <folder>/screen.mp4) until it reads "stop" on stdin, receives SIGINT/SIGTERM, or the Mac is about to sleep. Progress is reported to
 // stdout as one JSON object per line so the Gatit app can follow along.
 
 func emit(_ object: [String: Any]) {
@@ -19,6 +22,25 @@ func fail(_ message: String) -> Never {
 }
 
 let arguments = CommandLine.arguments
+if arguments.contains("--watch-calls") {
+    runCallWatcher()
+}
+
+// --mux: combine a finished recording's screen.mp4 and audio into video.mp4, then exit.
+if let muxIndex = arguments.firstIndex(of: "--mux"), muxIndex + 1 < arguments.count {
+    let folder = URL(fileURLWithPath: arguments[muxIndex + 1], isDirectory: true)
+    Task {
+        do {
+            try await muxVideo(in: folder)
+            emit(["event": "muxed", "folder": folder.path])
+            exit(0)
+        } catch {
+            fail("\(error)")
+        }
+    }
+    dispatchMain()
+}
+
 guard let outIndex = arguments.firstIndex(of: "--out"), outIndex + 1 < arguments.count else {
     fail("usage: gatit-recorder --out <folder>")
 }
@@ -27,6 +49,7 @@ let folder = URL(fileURLWithPath: arguments[outIndex + 1], isDirectory: true)
 let levels = LevelMeter()
 let mic = MicrophoneRecorder(levels: levels)
 let system = SystemAudioRecorder(levels: levels)
+var video: VideoRecorder?
 var stopped = false
 let stopLock = NSLock()
 
@@ -38,6 +61,7 @@ func stopAndExit(reason: String = "user") {
     // Stopping closes both files properly; an .m4a that is never closed can't be played.
     mic.stop()
     system.stop()
+    video?.stop()
     emit(["event": "stopped", "folder": folder.path, "reason": reason])
     exit(0)
 }
@@ -48,11 +72,20 @@ Task {
         guard await MicrophoneRecorder.requestPermission() else {
             fail("microphone permission denied; allow Gatit in System Settings > Privacy & Security > Microphone")
         }
+        let audioStart = CMClockGetTime(CMClockGetHostTimeClock())
         try system.start(writingTo: folder.appendingPathComponent("system.m4a"))
         try mic.start(writingTo: folder.appendingPathComponent("mic.m4a"))
         emit(["event": "started", "folder": folder.path])
         // Which app the call is in, and who is on it, as far as the open windows tell.
         emit(["event": "windows", "windows": CallWindows.list()])
+        if arguments.contains("--video") {
+            stopLock.withLock {
+                guard !stopped else { return }
+                let recorder = VideoRecorder(writingTo: folder.appendingPathComponent("screen.mp4"), audioStart: audioStart)
+                video = recorder
+                recorder.start()
+            }
+        }
     } catch {
         mic.stop()
         system.stop()

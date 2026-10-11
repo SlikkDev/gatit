@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
+use crate::drive::{self, SyncState};
 use crate::library::{Meeting, Status};
 use crate::settings::{self, Settings};
 use crate::state::{library_changed, state, Job};
@@ -22,6 +23,7 @@ pub struct AppStatus {
     meeting_id: Option<String>,
     started_at_ms: Option<i64>,
     job: Option<crate::state::JobProgress>,
+    drive_job: Option<drive::Progress>,
     can_record: Option<String>,
     /// "macos" or "windows".
     platform: &'static str,
@@ -43,11 +45,13 @@ pub fn app_status(app: AppHandle) -> AppStatus {
         )
     };
     let job = st.progress.lock().unwrap().clone();
+    let drive_job = st.drive.progress.lock().unwrap().clone();
     AppStatus {
         recording,
         meeting_id,
         started_at_ms,
         job,
+        drive_job,
         can_record: recorder::recording_blocker(),
         platform: std::env::consts::OS,
         os: match recorder::macos_version() {
@@ -65,7 +69,7 @@ pub fn toggle_recording(app: AppHandle) -> Result<(), String> {
     if recorder::is_recording(&app) {
         recorder::stop(&app)
     } else {
-        recorder::start(&app)
+        recorder::start(&app, None)
     }
 }
 
@@ -83,6 +87,11 @@ pub struct MeetingDetail {
     summary: Option<Summary>,
     mic: Option<PathBuf>,
     system: Option<PathBuf>,
+    video: Option<PathBuf>,
+    /// Seconds into the audio that the video starts.
+    video_offset: f64,
+    /// Google Drive upload state, once the meeting has been uploaded or tried.
+    drive: Option<Value>,
 }
 
 #[tauri::command]
@@ -90,7 +99,20 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
     let st = state(&app);
     let lib = st.library();
     let folder = lib.folder(&id)?;
+    let existing = |name: &str| Some(folder.join(name)).filter(|p| p.exists());
     let meeting = lib.get(&id)?;
+    // video.mp4 is lined up with the audio; until it exists, screen.mp4 starts `offset` in.
+    let (video, video_offset) = match existing("video.mp4") {
+        Some(path) => (Some(path), 0.0),
+        None => {
+            let offset = std::fs::read(folder.join("screen.json"))
+                .ok()
+                .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                .and_then(|v| v["offset"].as_f64())
+                .unwrap_or(0.0);
+            (existing("screen.mp4"), offset)
+        }
+    };
     Ok(MeetingDetail {
         names: lib.names(&meeting),
         meeting,
@@ -98,6 +120,11 @@ pub fn get_meeting(app: AppHandle, id: String) -> Result<MeetingDetail, String> 
         summary: lib.summary(&id),
         mic: transcribe::track_file(&folder, "mic"),
         system: transcribe::track_file(&folder, "system"),
+        video,
+        video_offset,
+        drive: Some(SyncState::load(&folder))
+            .filter(|s| !s.folder_id.is_empty() || s.error.is_some())
+            .map(|s| s.summary()),
     })
 }
 
@@ -138,6 +165,7 @@ pub fn update_meeting(
     let _ = lib.refresh(&id);
     drop(lib);
     library_changed(&app, &id);
+    drive::enqueue(&app, &id);
     Ok(meeting)
 }
 
@@ -176,8 +204,15 @@ pub fn delete_meeting(app: AppHandle, id: String) -> Result<(), String> {
     if st.recording().meeting_id.as_deref() == Some(id.as_str()) {
         return Err("Stop the recording before deleting it.".into());
     }
+    let drive_folder = st
+        .library()
+        .folder(&id)
+        .map(|f| SyncState::load(&f).folder_id)
+        .unwrap_or_default();
     st.library().delete(&id)?;
     library_changed(&app, &id);
+    // The Drive copy follows the local one into the (Drive) trash.
+    drive::trash_folder(&app, drive_folder);
     Ok(())
 }
 
@@ -256,7 +291,11 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> Result<(), String> {
     if settings.your_name.trim() != old.your_name.trim() {
         st.library().set_your_name(&settings.your_name)?;
     }
+    let catch_up = settings.drive_upload && !old.drive_upload;
     *st.settings.lock().unwrap() = settings;
+    if catch_up {
+        drive::resume(&app);
+    }
     Ok(())
 }
 
@@ -339,6 +378,54 @@ pub fn open_summary_prompt(app: AppHandle) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Opens a web page in the default browser.
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err("Not a web address.".into());
+    }
+    open::that_detached(&url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn drive_status(app: AppHandle) -> drive::Account {
+    state(&app).drive.account()
+}
+
+/// Signs in to Google in the browser and, once connected, uploads every call.
+#[tauri::command]
+pub async fn drive_connect(
+    app: AppHandle,
+    client_id: String,
+    client_secret: String,
+) -> Result<drive::Account, String> {
+    let account = state(&app)
+        .drive
+        .connect(&client_id, &client_secret)
+        .await?;
+    drive::resume(&app);
+    Ok(account)
+}
+
+#[tauri::command]
+pub fn drive_disconnect(app: AppHandle) -> Result<(), String> {
+    state(&app).drive.disconnect()
+}
+
+/// Uploads (or retries uploading) one meeting now.
+#[tauri::command]
+pub fn upload_meeting(app: AppHandle, id: String) -> Result<(), String> {
+    let st = state(&app);
+    if !st.drive.is_connected() {
+        return Err("Connect Google Drive in Settings first.".into());
+    }
+    if !st.settings().drive_upload {
+        return Err("Turn on Google Drive uploads in Settings first.".into());
+    }
+    drive::enqueue(&app, &id);
+    Ok(())
 }
 
 /// The built-in Hebrew-English terms, grouped, for Settings to show.

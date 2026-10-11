@@ -29,7 +29,7 @@
   <main id="main">
     <section id="empty" class="empty">
       <h2>No call selected</h2>
-      <p>Press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> when a call starts. Gatit records your microphone as "Me" and whatever your computer plays as "Them", with no bot joining the call.</p>
+      <p id="empty-intro">When a call starts, Gatit asks whether to record it. You can also press <b>Record</b> or use <kbd id="shortcut-hint"></kbd> at any time. Gatit records your microphone as "Me" and whatever your computer plays as "Them", with no bot joining the call.</p>
       <p id="empty-hint" class="muted"></p>
     </section>
 
@@ -54,6 +54,7 @@
           <span id="progress-label"></span>
         </div>
         <div id="error" class="error" hidden></div>
+        <div id="drive-line" class="drive" hidden></div>
         <div class="actions">
           <button id="summarize">Summarize</button>
           <button id="copy-summary">Copy summary</button>
@@ -68,6 +69,7 @@
         </div>
       </header>
 
+      <video id="video" class="video" muted playsinline preload="metadata" hidden></video>
       <div class="player" id="player" hidden>
         <button id="play" class="play">▶</button>
         <input id="seek" type="range" min="0" max="100" value="0" step="0.1">
@@ -88,10 +90,14 @@
       </label>
 
       <h3>Recording</h3>
+      <label><input id="s-ask" type="checkbox"> Ask to record when a Zoom, Meet or WhatsApp call starts
+        <small>A small pop-up appears in the top-right corner. Gatit notices calls by which app is using the microphone; it never joins them.</small>
+      </label>
       <label>Start/stop shortcut
         <input id="s-shortcut" placeholder="Control+Alt+Super+R">
         <small id="shortcut-help">Use Tauri key names, for example <code>Control+Alt+Super+R</code> (Super is the Command key).</small>
       </label>
+      <label><input id="s-video" type="checkbox"> Also record the call's video (Zoom, Meet or WhatsApp window)</label>
 
       <h3>Transcription</h3>
       <label>Language of new calls
@@ -135,6 +141,26 @@
       <label><input id="s-auto" type="checkbox"> Summarize automatically after transcribing</label>
       <label>Claude model <input id="s-claude-model"></label>
       <button id="edit-prompt" class="link">Edit the summary instructions</button>
+
+      <h3>Google Drive</h3>
+      <div id="drive-connected" hidden>
+        <p id="drive-account"></p>
+        <label><input id="s-drive-upload" type="checkbox"> Upload every call to Google Drive automatically</label>
+        <small>Each call becomes a folder in your Drive, <code>Gatit / date / time and title</code>, holding the same files as the meetings folder. The folder is renamed when the title changes.</small>
+        <button id="drive-disconnect" class="link">Disconnect Google Drive</button>
+      </div>
+      <div id="drive-setup" hidden>
+        <p class="muted">Gatit uploads through your own Google Cloud project, so no one else's keys are involved. It only ever sees the files it created. <button id="drive-guide" class="link">Setup guide</button></p>
+        <label>OAuth client ID
+          <input id="s-drive-id" placeholder="….apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+        </label>
+        <label>OAuth client secret
+          <input id="s-drive-secret" type="password" autocomplete="off">
+          <small>Both are stored in the macOS Keychain. Signing in opens your browser.</small>
+        </label>
+        <button id="drive-connect">Connect Google Drive</button>
+        <small id="drive-message"></small>
+      </div>
 
       <div class="actions">
         <button id="save-settings" class="primary">Save</button>
