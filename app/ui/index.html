@@ -36,6 +36,7 @@
     <section id="detail" hidden>
       <header class="detail-header">
         <input id="title" class="title" spellcheck="false">
+        <input id="participants" class="participants" placeholder="Who else was on the call?" spellcheck="false" title="The other people on the call. With one name, their lines in the transcript carry it.">
         <div class="meta">
           <span id="when"></span>
           <select id="source-app">
@@ -79,6 +80,12 @@
 
     <section id="settings" hidden>
       <h2>Settings</h2>
+
+      <h3>You</h3>
+      <label>Your name
+        <input id="s-name" placeholder="As it should appear in transcripts" autocomplete="off">
+        <small>Shown instead of "Me" on your lines, and told to Claude so summaries name you.</small>
+      </label>
 
       <h3>Recording</h3>
       <label>Start/stop shortcut
