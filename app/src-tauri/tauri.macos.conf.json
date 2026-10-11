@@ -7,7 +7,9 @@
       "binaries/whisper-quantize"
     ],
     "macOS": {
-      "minimumSystemVersion": "14.2"
+      "minimumSystemVersion": "14.2",
+      "signingIdentity": "-",
+      "hardenedRuntime": false
     }
   }
 }

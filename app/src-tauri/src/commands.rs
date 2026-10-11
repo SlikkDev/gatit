@@ -360,3 +360,9 @@ pub fn open_summary_prompt(app: AppHandle) -> Result<(), String> {
         open_path(&path, false)
     }
 }
+
+/// The built-in Hebrew-English terms, grouped, for Settings to show.
+#[tauri::command]
+pub fn builtin_vocabulary() -> Vec<crate::vocabulary::BuiltinGroupInfo> {
+    crate::vocabulary::builtin_groups()
+}
