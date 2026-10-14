@@ -33,7 +33,7 @@ Some places require telling the other people on a call that you are recording.
 
 ## Getting the app
 
-The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/gatit/). Every push to `main` publishes a build on the [latest release](https://github.com/SlikkDev/gatit/releases/latest) page. Download the one for your machine (on a Mac, Apple menu → About This Mac shows the chip):
+The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/gatit/). A release is published only after macOS signing/notarization and Windows Authenticode verification pass. Check the [release notes](https://github.com/SlikkDev/gatit/releases/tag/latest) for verification before installing; older unsigned builds are awaiting replacement. Download the one for your machine (on a Mac, Apple menu → About This Mac shows the chip):
 
 - **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip (M1 or later).
 - **Gatit-macos-intel.zip** for an Intel Mac, such as a 2019 MacBook Pro.
@@ -41,23 +41,19 @@ The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/ga
 
 ### Mac
 
-Unzip it and drag `Gatit.app` into Applications. From then on Gatit updates itself: it checks the latest release every few hours, installs a newer build in the background and shows a **Restart** button (in the window and in the menu bar) when one is ready; it never restarts during a recording.
+Unzip it and drag `Gatit.app` into Applications. When the release includes updater signatures, Gatit updates itself: it checks the latest release every few hours, installs a newer build in the background and shows a **Restart** button (in the window and in the menu bar) when one is ready; it never restarts during a recording.
 
-The release notes say whether the build is signed with an Apple Developer ID and notarized (then it opens like any other app) or only ad-hoc signed. [docs/signing.md](docs/signing.md) explains how to turn signing and notarization on. An ad-hoc build is blocked on the first launch:
+The release notes and verification files identify the signed build and publisher. If macOS blocks a download or reports it damaged, stop and check that you have the verified release; report the version and message. [docs/signing.md](docs/signing.md) describes the release checks.
 
-- **macOS 15 (Sequoia):** double-click Gatit and click **Done** on the warning. Open System Settings → Privacy & Security, scroll down to the line about Gatit and click **Open Anyway**, then **Open** on the next warning.
-- **macOS 14 (Sonoma):** Control-click (right-click) Gatit → **Open** → **Open**.
-- If macOS says Gatit is "damaged and can't be opened", the download got quarantined before it was signed. Run `xattr -cr /Applications/Gatit.app` in Terminal and open it again.
-
-macOS remembers the choice, so later launches are a normal double-click. On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**. With video on (Settings > Recording, on by default) it also asks for **Screen & System Audio Recording**; until that's allowed, calls are recorded as audio only, and allowing it takes effect from the next call.
+On the first recording macOS asks for two permissions: **Microphone** and **System Audio Recording**. With video on (Settings > Recording, on by default) it also asks for **Screen & System Audio Recording**; until that's allowed, calls are recorded as audio only, and allowing it takes effect from the next call.
 
 ### Windows
 
-Run the installer. It is not signed, so SmartScreen shows "Windows protected your PC": click **More info**, then **Run anyway**. The installer puts Gatit in your user account (no admin rights needed) and the app lives in the system tray. If recording fails with a microphone error, allow desktop apps to use the microphone in Settings → Privacy & security → Microphone. The other side of the call is captured from the default output device with WASAPI loopback, so use the speakers or headphones Windows considers the default.
+Run the verified installer after checking its publisher. A newly signed release can still encounter SmartScreen reputation or organization-policy warnings; stop and report the version, publisher and message if that happens. The installer puts Gatit in your user account (no admin rights needed) and the app lives in the system tray. If recording fails with a microphone error, allow desktop apps to use the microphone in Settings → Privacy & security → Microphone. The other side of the call is captured from the default output device with WASAPI loopback, so use the speakers or headphones Windows considers the default.
 
-Gatit updates itself on Windows too: when a newer build is published, the window and the tray menu show a **Restart** button, and clicking it runs the new installer, which replaces Gatit and opens it again. It refuses to do that during a recording.
+When updater signatures are available, Gatit updates itself on Windows too: when a newer build is published, the window and the tray menu show a **Restart** button, and clicking it runs the new installer, which replaces Gatit and opens it again. It refuses to do that during a recording.
 
-Builds for pull requests are workflow artifacts on the Actions run instead. GitHub wraps those in a second zip, so unzip twice.
+Pull-request artifacts are unsigned CI builds for development, not public release downloads.
 
 Reading the call app's window title (to tell a Zoom call from a Meet call, and to pick up the host's name from "Dana's Zoom Meeting" or a WhatsApp contact from the call window) works only for apps with **Screen Recording** permission. Gatit doesn't ask for it; grant it in System Settings > Privacy & Security if you want those filled in automatically. Without it, names still come from Claude's reading of the call and from what you type.
 

@@ -14,3 +14,6 @@ recordings/
 # Whisper models are downloaded by the app, never committed.
 *.bin
 .DS_Store
+
+# Python release-pipeline tests
+__pycache__/

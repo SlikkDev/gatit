@@ -9,7 +9,8 @@ for name in "$@"; do
   value="${!name:-}"
   if [ -n "$value" ]; then
     # The heredoc form carries multi-line values (the updater key is two lines).
-    printf '%s<<GATIT_EOF\n%s\nGATIT_EOF\n' "$name" "$value" >> "$GITHUB_ENV"
+    delimiter="GATIT_$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+    printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "$value" "$delimiter" >> "$GITHUB_ENV"
     echo "$name: set"
   else
     echo "$name: not set"
