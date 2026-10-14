@@ -1,56 +1,43 @@
 #!/usr/bin/env bash
-# Prints the Tauri config overrides for a CI build (`cargo tauri build --config`).
-#
-#   scripts/ci-build-config.sh <version>
-#
-# Signing: when APPLE_CERTIFICATE (a base64 .p12 with a "Developer ID Application" certificate)
-# and APPLE_CERTIFICATE_PASSWORD are set, the app is signed with that identity under the
-# hardened runtime, with the entitlements in app/src-tauri/Entitlements.plist, and Tauri
-# notarizes it when APPLE_ID, APPLE_PASSWORD and APPLE_TEAM_ID are set too. Otherwise the build
-# keeps the ad-hoc signature from tauri.macos.conf.json.
-#
-# Updates: when TAURI_SIGNING_PRIVATE_KEY is set, the build also produces the signed
-# Gatit.app.tar.gz the in-app updater downloads.
+# scripts/ci-build-config.sh <version> <macos|windows> <ci|release>
+# CI artifacts never consume credentials. Releases require complete configuration.
 set -euo pipefail
-version="$1"
-identity=""
-if [ -n "${APPLE_CERTIFICATE:-}" ]; then
-  if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
-    identity="$APPLE_SIGNING_IDENTITY"
-  else
-    # Read the certificate's name from the .p12 so it doesn't have to be a secret of its own.
-    tmp="$(mktemp -d)"
-    keychain="$tmp/identity.keychain-db"
-    echo "$APPLE_CERTIFICATE" | base64 --decode > "$tmp/cert.p12"
-    security create-keychain -p "" "$keychain"
-    security import "$tmp/cert.p12" -k "$keychain" -P "${APPLE_CERTIFICATE_PASSWORD:-}" -T /usr/bin/codesign >/dev/null
-    identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)"
-    security delete-keychain "$keychain"
-    rm -rf "${tmp:?}"
-    if [ -z "$identity" ]; then
-      echo "APPLE_CERTIFICATE holds no \"Developer ID Application\" certificate" >&2
-      exit 1
-    fi
-  fi
-  echo "signing with: $identity" >&2
-  if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
-    echo "notarizing as $APPLE_ID" >&2
-  else
-    echo "APPLE_ID, APPLE_PASSWORD or APPLE_TEAM_ID missing: signed but not notarized" >&2
-  fi
-else
-  echo "no APPLE_CERTIFICATE: ad-hoc signature" >&2
-fi
+version="${1:?version}"; platform="${2:?platform}"; mode="${3:?mode}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version" >&2; exit 1; }
+case "$platform" in macos|windows) ;; *) echo "Invalid platform" >&2; exit 1 ;; esac
+case "$mode" in ci|release) ;; *) echo "Invalid mode" >&2; exit 1 ;; esac
+require() {
+  local missing=0 name
+  for name in "$@"; do
+    if [ -z "${!name:-}" ]; then echo "Missing release configuration: $name" >&2; missing=1; fi
+  done
+  [ "$missing" -eq 0 ]
+}
 updater=false
-if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-  updater=true
-else
-  echo "no TAURI_SIGNING_PRIVATE_KEY: no update package" >&2
+if [ "$mode" = release ]; then
+  if [ "$platform" = macos ]; then
+    require APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+    [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Invalid APPLE_TEAM_ID" >&2; exit 1; }
+    [[ "$APPLE_SIGNING_IDENTITY" == "Developer ID Application: "*" ($APPLE_TEAM_ID)" ]] || {
+      echo "APPLE_SIGNING_IDENTITY must be a Developer ID Application identity for APPLE_TEAM_ID" >&2; exit 1;
+    }
+  else
+    require WINDOWS_SIGNING_PROVIDER
+    [ "$WINDOWS_SIGNING_PROVIDER" = azure-artifact-signing ] || {
+      echo "Unsupported WINDOWS_SIGNING_PROVIDER: implement the approved provider adapter before releasing" >&2; exit 1;
+    }
+    require AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT
+  fi
+  [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || updater=true
 fi
-
-jq -n --arg version "$version" --arg identity "$identity" --argjson updater "$updater" '
-  { version: $version, bundle: { createUpdaterArtifacts: $updater } }
-  + (if $identity == "" then {} else
-      { bundle: { createUpdaterArtifacts: $updater,
-                  macOS: { signingIdentity: $identity, hardenedRuntime: true, entitlements: "Entitlements.plist" } } }
-    end)'
+jq -n --arg version "$version" --arg platform "$platform" --arg mode "$mode" \
+  --arg identity "${APPLE_SIGNING_IDENTITY:-}" --argjson updater "$updater" '
+  {version: $version, bundle: {createUpdaterArtifacts: $updater}}
+  | if $platform == "macos" then
+      .bundle.macOS = (if $mode == "release" then
+        {signingIdentity: $identity, hardenedRuntime: true, entitlements: "Entitlements.plist"}
+        else {signingIdentity: "-", hardenedRuntime: false} end)
+    elif $mode == "release" then
+      .bundle.windows = {signCommand: {cmd: "pwsh", args:
+        ["-NoProfile", "-NonInteractive", "-File", "../../scripts/sign-windows.ps1", "-Path", "%1"]}}
+    else . end'

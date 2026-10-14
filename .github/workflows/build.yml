@@ -4,14 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
-# Every build gets a version of its own (0.2.<run number>) so the app can tell a newer one
-# apart. The run numbers restarted when this workflow was renamed and the last 0.1 build was
-# 0.1.34, so the minor version went up to keep versions increasing. Apple signing,
-# notarization and update signatures switch on when the matching secrets exist (see
-# docs/signing.md) and fall back to an ad-hoc build without them.
+# Pull requests produce unsigned CI artifacts. Only main can use signing credentials
+# or publish, and missing/invalid signing configuration fails the release.
+permissions:
+  contents: read
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 env:
   GATIT_VERSION: 0.2.${{ github.run_number }}
+  GATIT_MODE: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'release' || 'ci' }}
 
 jobs:
   test:
@@ -31,6 +35,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
+      - name: Release pipeline regression tests
+        run: python3 -m unittest discover -s scripts/tests -v
       - name: App format and lint
         working-directory: app/src-tauri
         run: |
@@ -64,6 +70,20 @@ jobs:
             slug: apple-silicon
     steps:
       - uses: actions/checkout@v4
+      - name: Expose release credentials
+        if: env.GATIT_MODE == 'release'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: scripts/ci-export-secrets.sh APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Require Developer ID and notarization for releases
+        run: scripts/ci-build-config.sh "$GATIT_VERSION" macos "$GATIT_MODE" > build-config.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -82,41 +102,49 @@ jobs:
         run: scripts/build-whisper-mac.sh ${{ matrix.target }}
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
-      # Tauri treats an APPLE_CERTIFICATE that is set but empty as a certificate to import, so
-      # only the secrets that exist become environment variables for the build.
-      - name: Expose the signing secrets that exist
-        env:
-          # Apple Developer ID signing and notarization (Tauri reads these itself).
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Signs the update packages the app checks for.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: scripts/ci-export-secrets.sh APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-      - name: Choose signing (Developer ID when the secrets exist, ad-hoc otherwise)
-        run: scripts/ci-build-config.sh "$GATIT_VERSION" > build-config.json
       - name: Build app bundle
         working-directory: app/src-tauri
         run: cargo tauri build --target ${{ matrix.target }} --bundles app --config ../../build-config.json
       - name: Collect the app and the update package
-        run: scripts/ci-collect-mac.sh ${{ matrix.target }} ${{ matrix.slug }}
+        run: scripts/ci-collect-mac.sh ${{ matrix.target }} ${{ matrix.slug }} "$GATIT_MODE"
       - uses: actions/upload-artifact@v4
         with:
-          name: Gatit-macos-${{ matrix.slug }}
+          name: ${{ env.GATIT_MODE == 'release' && 'Gatit' || 'CI-unsigned-Gatit' }}-macos-${{ matrix.slug }}
           path: |
             Gatit-macos-${{ matrix.slug }}.zip
             Gatit-macos-${{ matrix.slug }}.app.tar.gz
             Gatit-macos-${{ matrix.slug }}.app.tar.gz.sig
-            Gatit-macos-${{ matrix.slug }}.signing
+            Gatit-macos-${{ matrix.slug }}.verification.json
 
   windows:
     name: Gatit installer (Windows)
     runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+      - name: Test Authenticode failure handling
+        shell: pwsh
+        run: ./scripts/tests/verify-windows.tests.ps1
+      - name: Expose release configuration
+        if: env.GATIT_MODE == 'release'
+        shell: bash
+        env:
+          WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AZURE_SIGNING_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZURE_CERTIFICATE_PROFILE: ${{ vars.AZURE_CERTIFICATE_PROFILE }}
+          WINDOWS_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_PUBLISHER_SUBJECT }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bash scripts/ci-export-secrets.sh WINDOWS_SIGNING_PROVIDER AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Require Authenticode configuration for releases
+        shell: bash
+        run: bash scripts/ci-build-config.sh "$GATIT_VERSION" windows "$GATIT_MODE" > build-config.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -134,33 +162,53 @@ jobs:
         run: ./scripts/build-whisper-windows.ps1
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
-      # No Microsoft signing yet; the update package is signed with the same key as on the Mac.
-      - name: Expose the update signing key if it exists
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: bash scripts/ci-export-secrets.sh TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-      - name: Version the build (and sign the update package when the key exists)
-        shell: bash
-        run: bash scripts/ci-build-config.sh "$GATIT_VERSION" > build-config.json
+      - name: Sign in to Azure with GitHub OIDC
+        if: env.GATIT_MODE == 'release'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Install Microsoft's signing module
+        if: env.GATIT_MODE == 'release'
+        shell: pwsh
+        run: Install-Module -Name ArtifactSigning -RequiredVersion 0.1.20 -Scope CurrentUser -Force -Repository PSGallery
+      - name: Sign and verify native sidecars before bundling
+        if: env.GATIT_MODE == 'release'
+        shell: pwsh
+        run: |
+          foreach ($name in 'gatit-recorder', 'whisper-cli', 'whisper-quantize') {
+            ./scripts/sign-windows.ps1 -Path "app/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
+          }
       - name: Build installer
         working-directory: app/src-tauri
         run: cargo tauri build --bundles nsis --config ../../build-config.json
+      - name: Verify app, installer and sidecars without executing them
+        if: env.GATIT_MODE == 'release'
+        shell: pwsh
+        run: |
+          ./scripts/verify-windows.ps1 -Path app/src-tauri/target/release/gatit.exe
+          $installers = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          ./scripts/verify-windows.ps1 -Path $installers[0].FullName
+          foreach ($name in 'gatit-recorder', 'whisper-cli', 'whisper-quantize') {
+            ./scripts/verify-windows.ps1 -Path "app/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
+          }
       - name: Collect the installer and the update signature
         shell: bash
-        run: bash scripts/ci-collect-windows.sh
+        run: bash scripts/ci-collect-windows.sh "$GATIT_MODE"
       - uses: actions/upload-artifact@v4
         with:
-          name: Gatit-windows
+          name: ${{ env.GATIT_MODE == 'release' && 'Gatit' || 'CI-unsigned-Gatit' }}-windows
           path: |
             Gatit-windows-setup.exe
             Gatit-windows-setup.exe.sig
+            Gatit-windows.verification.json
 
   release:
     name: Publish downloads
     needs: [test, mac, windows]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -173,6 +221,8 @@ jobs:
           pattern: Gatit-*
           path: dist
           merge-multiple: true
+      - name: Require verified artifacts for every platform
+        run: python3 scripts/release-manifest.py verify dist
       - name: Write the update feed and the release notes
         run: scripts/ci-release-notes.sh "$GATIT_VERSION" dist
       - name: Replace the "latest" pre-release with this build
@@ -180,8 +230,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # A manual rerun of an old main commit must not replace a newer release.
+          test "$(gh api "repos/$GH_REPO/commits/main" --jq .sha)" = "$GITHUB_SHA"
           ls -l dist
-          gh release delete latest --yes --cleanup-tag || true
+          gh release delete latest --yes --cleanup-tag
           gh release create latest dist/* \
             --prerelease \
             --target "$GITHUB_SHA" \

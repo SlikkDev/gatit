@@ -210,7 +210,7 @@
         </a>
       </div>
       <p class="fineprint">macOS 14.2 or later. Not sure which Mac you have? Apple menu → About This Mac shows the chip. <span id="build-info"></span></p>
-      <p class="fineprint">On Windows, SmartScreen asks once before the first run: click <b>More info</b>, then <b>Run anyway</b>.</p>
+      <p class="fineprint">Check the release notes for a verified signed build before installing. Older unsigned builds are awaiting replacement.</p>
 
       <div class="demo" aria-label="Example transcript">
         <div class="bar">
@@ -266,18 +266,17 @@
     <section id="install">
       <div class="wrap" style="padding:0">
         <h2>First launch</h2>
-        <p class="sub">The builds are not signed with a developer certificate, so your system asks once before the first run. After that, Gatit updates itself: when a newer build is ready it shows a Restart button, and never restarts during a recording.</p>
+        <p class="sub">Install a release only when its notes confirm macOS notarization or Windows publisher verification. In-app updates are available when the release includes updater signatures; Gatit never restarts during a recording.</p>
         <div class="steps">
-          <div class="step"><div><h3>Mac: unzip and drag Gatit into Applications</h3><p>Then double-click it. macOS will show a warning: that's expected.</p></div></div>
-          <div class="step"><div><h3>Mac: allow it, once</h3><p><b>macOS 15:</b> click Done, open System Settings → Privacy &amp; Security, scroll to the line about Gatit, click <b>Open Anyway</b>, then Open. <b>macOS 14:</b> Control-click Gatit → Open → Open.</p></div></div>
+          <div class="step"><div><h3>Mac: unzip and drag Gatit into Applications</h3><p>Use the verified release linked above. Then double-click Gatit.</p></div></div>
           <div class="step"><div><h3>Mac: grant the permissions on your first recording</h3><p>Microphone and System Audio Recording. With video on, also Screen &amp; System Audio Recording. Until that one is allowed, calls are recorded as audio only.</p></div></div>
-          <div class="step"><div><h3>Windows: run the installer</h3><p>SmartScreen shows "Windows protected your PC": click <b>More info</b>, then <b>Run anyway</b>. No admin rights needed. Gatit lives in the system tray and hears the other side through the speakers or headphones Windows considers the default. If recording fails with a microphone error, allow desktop apps to use the microphone in Settings → Privacy &amp; security → Microphone.</p></div></div>
+          <div class="step"><div><h3>Windows: run the installer</h3><p>Check the installer's verified publisher before opening it. No admin rights needed. Gatit lives in the system tray and hears the other side through the speakers or headphones Windows considers the default. If recording fails with a microphone error, allow desktop apps to use the microphone in Settings → Privacy &amp; security → Microphone.</p></div></div>
         </div>
         <details>
           <summary>macOS says Gatit is "damaged and can't be opened"</summary>
           <div class="body">
-            <p>The download was quarantined before macOS checked its signature. Clear the flag and open it again:</p>
-            <p><code>xattr -cr /Applications/Gatit.app</code></p>
+            <p>Stop and check that you downloaded a release whose notes confirm signing and notarization. Report the version and warning so we can investigate.</p>
+            <p>The same applies to Windows publisher or SmartScreen warnings; reputation and organization policies can still affect a newly signed release.</p>
           </div>
         </details>
       </div>

@@ -8,6 +8,7 @@
 # app's update check then finds nothing.
 set -euo pipefail
 version="${1:?version}"; dist="${2:?dist dir}"
+python3 scripts/release-manifest.py verify "$dist"
 repo="${GITHUB_REPOSITORY:-SlikkDev/gatit}"
 base="https://github.com/$repo/releases/download/latest"
 
@@ -29,23 +30,19 @@ if [ "$platforms" != "{}" ]; then
     '{version: $version, pub_date: $date, platforms: $platforms}' > "$dist/latest.json"
 fi
 
-signing="$(cat "$dist"/Gatit-macos-*.signing 2>/dev/null | sort -u | tr '\n' ' ')"
-for f in "$dist"/Gatit-macos-*.signing; do [ -e "$f" ] && rm "$f"; done
 {
   echo "Gatit $version, built from commit ${GITHUB_SHA:0:7}."
   echo
-  echo "Pick **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip, **Gatit-macos-intel.zip** for an Intel Mac, or **Gatit-windows-setup.exe** for Windows (SmartScreen asks once: More info, then Run anyway)."
+  echo "Pick **Gatit-macos-apple-silicon.zip**, **Gatit-macos-intel.zip**, or **Gatit-windows-setup.exe** for your machine."
   echo
-  case "$signing" in
-    *notarized*) echo "Signed with an Apple Developer ID and notarized: unzip, drag to Applications and open it like any app." ;;
-    *developer-id*) echo "Signed with an Apple Developer ID but not notarized, so macOS still asks before the first launch: see [Getting the app](https://github.com/$repo#getting-the-app)." ;;
-    *) echo "The app has only an ad-hoc signature, so macOS blocks the first launch: see [Getting the app](https://github.com/$repo#getting-the-app) for the two clicks that allow it." ;;
-  esac
+  echo "Both Mac builds passed Developer ID, hardened runtime, timestamp, notarization ticket and Gatekeeper checks, including their embedded helpers and extracted download archives."
+  echo "Windows binaries and the NSIS installer passed Authenticode publisher and timestamp checks. SmartScreen reputation and organization policy can still affect a newly signed release."
+  echo "The verification JSON files record the build commit, publisher and SHA-256 hashes."
   echo
   if [ -f "$dist/latest.json" ]; then
-    echo "Gatit updates itself: an installed copy picks this build up within a few hours and shows a Restart button. The \`.app.tar.gz\` files, the \`.sig\` files and \`latest.json\` are what it uses."
+    echo "All three platforms include signed updater packages. Gatit checks these with its embedded updater public key before installation."
   else
-    echo "Gatit's updater cannot pick this build up yet (the update signing key isn't in the repository's secrets, see [docs/signing.md](https://github.com/$repo/blob/main/docs/signing.md)), so download it by hand."
+    echo "This release has no in-app update packages. Download the new version manually; see [signing setup](https://github.com/$repo/blob/main/docs/signing.md)."
   fi
 } > release-notes.md
 cat release-notes.md
