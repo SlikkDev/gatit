@@ -22,6 +22,10 @@ if [ "$mode" = release ]; then
       echo "APPLE_SIGNING_IDENTITY must be a Developer ID Application identity for APPLE_TEAM_ID" >&2; exit 1;
     }
   else
+    require WINDOWS_SIGNING_PROVIDER
+    [ "$WINDOWS_SIGNING_PROVIDER" = azure-artifact-signing ] || {
+      echo "Unsupported WINDOWS_SIGNING_PROVIDER: implement the approved provider adapter before releasing" >&2; exit 1;
+    }
     require AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT
   fi
   [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || updater=true

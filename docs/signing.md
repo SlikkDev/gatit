@@ -30,7 +30,22 @@ Set these **repository Actions variables**:
 
 `verify-macos.sh` checks every native executable, the expected team, Developer ID authority, hardened runtime, timestamp, stapled ticket, and Gatekeeper assessment. The collector repeats verification on a fresh extraction of the user ZIP and, if present, the updater archive. Nothing launches the app. Local development can continue using the ad-hoc platform configuration.
 
-### Windows: Microsoft Artifact Signing
+### Windows: choose an eligible provider first
+
+The publisher's legal identity and country determine the available services. **No provider has been selected or enrolled for Gatit.** The draft contains an Azure adapter, gated by an explicit `WINDOWS_SIGNING_PROVIDER=azure-artifact-signing` choice. For another provider, replace the signing adapter and its authentication steps before merging; keep the Authenticode publisher/timestamp verification and release hash gates. Missing or unimplemented provider choices fail before login or signing.
+
+Options checked against official sources on 2026-10-14:
+
+| Option | Eligibility and costs | Gatit readiness |
+| --- | --- | --- |
+| [Microsoft Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart) | Public Trust includes **Israeli organizations**; **individuals only in the US or Canada**. A VAT-registered sole proprietor must not be assumed to qualify as an organization. Paid Azure subscription and identity validation required. Regional price still needs a quote. | Adapter prepared, but unsuitable for an Israeli individual. Publisher eligibility and owner selection remain pending. |
+| [SSL.com IV](https://www.ssl.com/products/software-integrity/code-signing/iv/) or [OV](https://www.ssl.com/products/software-integrity/code-signing/ov/) with [eSigner](https://www.ssl.com/products/software-integrity/signing-service/) | IV is for individuals, OV for organizations. Israel is in the [accepted certificate country list](https://www.ssl.com/country-codes/); issuance still requires [identity/address validation](https://www.ssl.com/faqs/ssl-ov-validation-requirements/). Published one-year IV/OV certificate price: **USD 129/year**. Cloud signing is extra; the page displays a starting **USD 15/month** tier with an annual billing selection. Confirm billing term, quotas and tax before purchase. | Plausible paid route for either Israeli publisher type. Its CI signing adapter and approved credentials would need to be configured after selection. |
+| [SignPath Foundation](https://signpath.org/) | **Free for accepted open-source projects**, using the Foundation's publisher certificate. Acceptance is discretionary under its [terms](https://signpath.org/terms), including project reputation, source/build verification, MFA, release approvers and manual signing approval. | Gatit has a public MIT repository, documentation and releases. Acceptance is unconfirmed. Its upstream whisper executables need review: the terms generally permit signing only the project's own code, not upstream binaries. Do not sign those under a Foundation certificate without an accepted policy. |
+| [Certum Open Source in the Cloud](https://shop.certum.eu/open-source-code-signing-on-simplysign.html) | Lists **from EUR 49**, but its product page currently says **out of stock**. Uses SimplySign mobile/desktop authentication. | Not a currently available purchase path; Israeli issuance and unattended CI suitability also remain unverified. |
+
+No application, purchase, identity submission, account creation or access grant has been made for any option. Reuse an existing approved service where available.
+
+### Prepared Azure adapter
 
 The integration uses Microsoft's [Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/overview) service (formerly Trusted Signing), a **Public Trust** certificate profile, and the official `ArtifactSigning` PowerShell module pinned to 0.1.20. Private Trust and test profiles are unsuitable for public downloads.
 
@@ -49,6 +64,7 @@ Set these **repository Actions variables**:
 
 | Variable | Required value |
 | --- | --- |
+| `WINDOWS_SIGNING_PROVIDER` | `azure-artifact-signing`, only after the owner selects this service and confirms eligibility |
 | `AZURE_CLIENT_ID` | Federated signing identity's client ID |
 | `AZURE_TENANT_ID` | Entra tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Subscription containing the signing account |

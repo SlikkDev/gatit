@@ -17,6 +17,7 @@ MAC = dict(APPLE_CERTIFICATE='private-p12-fixture', APPLE_CERTIFICATE_PASSWORD='
            APPLE_ID='fixture@example.invalid', APPLE_PASSWORD='private-notary-fixture', APPLE_TEAM_ID='ABCDEFGHIJ')
 WIN = dict.fromkeys(['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID', 'AZURE_SIGNING_ENDPOINT',
                      'AZURE_SIGNING_ACCOUNT', 'AZURE_CERTIFICATE_PROFILE', 'WINDOWS_PUBLISHER_SUBJECT'], 'fixture')
+WIN['WINDOWS_SIGNING_PROVIDER'] = 'azure-artifact-signing'
 
 
 class BuildConfigTests(unittest.TestCase):
@@ -65,6 +66,12 @@ class BuildConfigTests(unittest.TestCase):
     def test_unknown_modes_and_platforms_rejected(self):
         for platform, mode in [('macos', 'Release'), ('linux', 'release'), ('windows', '')]:
             self.assertNotEqual(self.config(platform, mode).returncode, 0)
+
+    def test_unimplemented_provider_cannot_silently_use_azure(self):
+        p = self.config('windows', 'release', {**WIN, 'WINDOWS_SIGNING_PROVIDER': 'another-provider'})
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('WINDOWS_SIGNING_PROVIDER', p.stderr)
+        self.assertEqual(p.stdout, '')
 
 
 class ReleaseGateTests(unittest.TestCase):

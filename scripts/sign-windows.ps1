@@ -3,6 +3,9 @@
 param([Parameter(Mandatory)][string]$Path)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($env:WINDOWS_SIGNING_PROVIDER -ne 'azure-artifact-signing') {
+    throw 'Select an eligible WINDOWS_SIGNING_PROVIDER and implement its adapter before signing'
+}
 foreach ($name in 'AZURE_SIGNING_ENDPOINT', 'AZURE_SIGNING_ACCOUNT', 'AZURE_CERTIFICATE_PROFILE', 'WINDOWS_PUBLISHER_SUBJECT') {
     if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Missing release configuration: $name" }
 }
