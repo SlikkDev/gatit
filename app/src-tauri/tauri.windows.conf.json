@@ -1,6 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
+    "resources": {
+      "binaries/whisper-LICENSE.txt": "whisper-LICENSE.txt",
+      "binaries/whisper-provenance.json": "whisper-provenance.json"
+    },
     "externalBin": [
       "binaries/gatit-recorder",
       "binaries/whisper-cli",

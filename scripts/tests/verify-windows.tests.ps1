@@ -40,4 +40,14 @@ Get-ChildItem (Join-Path $PSScriptRoot '..') -Filter '*.ps1' | ForEach-Object {
 }
 Write-Host 'Authenticode verifier failure-path tests passed.'
 
+$version = Join-Path $PSScriptRoot '../msix-version.ps1'
+if ((& $version -Version '0.2.9') -cne '1.2.9.0') { throw 'Wrong Store version mapping' }
+if ((& $version -Version '65534.65535.65535') -cne '65535.65535.65535.0') { throw 'Wrong Store version limit' }
+foreach ($invalid in '65535.0.1', '0.65536.1', '0.1.65536', '0.2.9-beta', '0.2') {
+    $failed = $false
+    try { & $version -Version $invalid } catch { $failed = $true }
+    if (-not $failed) { throw "Invalid Store version accepted: $invalid" }
+}
+Write-Host 'Store version tests passed.'
+
 Remove-Variable GatitTestSignature -Scope Global

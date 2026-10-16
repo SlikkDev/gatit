@@ -9,12 +9,15 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $triple = "x86_64-pc-windows-msvc"
-$version = if ($env:WHISPER_CPP_VERSION) { $env:WHISPER_CPP_VERSION } else { "v1.9.4" }
+$sourceLock = Get-Content "$root/packaging/windows/upstream.json" -Raw | ConvertFrom-Json
 
-$src = "$root/.build/whisper.cpp"
-if (-not (Test-Path "$src/.git")) {
-  git clone --depth 1 --branch $version https://github.com/ggml-org/whisper.cpp.git $src
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Never reuse cached objects or source for the unsigned upstream exception.
+$src = "$root/.build/whisper-$(New-Guid)"
+git clone --depth 1 --branch $sourceLock.tag $sourceLock.repository $src
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$actualCommit = git -C $src rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $actualCommit -cne $sourceLock.commit) {
+  throw 'Whisper tag no longer resolves to the reviewed commit'
 }
 $build = "$src/build-win64"
 cmake -S $src -B $build -A x64 `
@@ -40,3 +43,6 @@ if (Get-ChildItem -Path "$build/bin" -Recurse -Include "ggml*.dll", "whisper*.dl
   throw "whisper.cpp built shared libraries; expected a static build"
 }
 Write-Host "built $out/whisper-cli-$triple.exe and whisper-quantize-$triple.exe"
+Copy-Item "$src/LICENSE" "$out/whisper-LICENSE.txt" -Force
+python "$root/scripts/upstream-integrity.py" create $out "$out/whisper-provenance.json"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

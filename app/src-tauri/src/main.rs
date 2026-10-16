@@ -15,6 +15,10 @@ mod state;
 mod summary;
 mod transcribe;
 mod transcript;
+#[cfg(not(feature = "microsoft-store"))]
+mod updater;
+#[cfg(feature = "microsoft-store")]
+#[path = "store_updater.rs"]
 mod updater;
 mod vocabulary;
 
@@ -38,10 +42,16 @@ pub(crate) fn show_window(app: &AppHandle) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    #[cfg(all(windows, feature = "microsoft-store"))]
+    if !updater::check_runtime() {
+        return;
+    }
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init());
+    #[cfg(not(feature = "microsoft-store"))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {

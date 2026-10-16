@@ -23,10 +23,16 @@ if [ "$mode" = release ]; then
     }
   else
     require WINDOWS_SIGNING_PROVIDER
-    [ "$WINDOWS_SIGNING_PROVIDER" = azure-artifact-signing ] || {
-      echo "Unsupported WINDOWS_SIGNING_PROVIDER: implement the approved provider adapter before releasing" >&2; exit 1;
-    }
-    require AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT
+    case "$WINDOWS_SIGNING_PROVIDER" in
+      azure-artifact-signing)
+        require AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT ;;
+      signpath-foundation)
+        require SIGNPATH_API_TOKEN SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_SIGNING_POLICY_SLUG SIGNPATH_ARTIFACT_CONFIGURATION_SLUG WINDOWS_PUBLISHER_SUBJECT
+        [ "${SIGNPATH_NSIS_UPSTREAM_APPROVED:-}" = true ] || {
+          echo "SIGNPATH_NSIS_UPSTREAM_APPROVED requires owner approval of the pinned helper exceptions" >&2; exit 1;
+        } ;;
+      *) echo "Unsupported WINDOWS_SIGNING_PROVIDER" >&2; exit 1 ;;
+    esac
   fi
   [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || updater=true
 fi

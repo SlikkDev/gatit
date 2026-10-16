@@ -1,0 +1,66 @@
+name: Microsoft Store package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      submission:
+        description: Use the verified Partner Center identity for a Store submission artifact
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  msix:
+    name: Build and validate MSIX (no installation or publication)
+    runs-on: windows-latest
+    env:
+      GATIT_VERSION: 0.2.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            recorder-win
+          key: microsoft-store
+      - name: Build native tools from pinned source
+        shell: pwsh
+        run: |
+          ./scripts/build-recorder-windows.ps1
+          ./scripts/build-whisper-windows.ps1
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version 2.12.3 --locked
+      - name: Prepare Store build configuration
+        shell: bash
+        run: |
+          scripts/ci-build-config.sh "$GATIT_VERSION" windows ci > build-config.json
+          jq -s '.[0] * .[1]' build-config.json app/src-tauri/tauri.store.conf.json > store-build-config.json
+      - name: Build Store edition without the direct-download updater
+        working-directory: app/src-tauri
+        run: cargo tauri build --no-bundle --features microsoft-store --config ../../store-build-config.json
+      - name: Validate Store edition
+        working-directory: app/src-tauri
+        run: cargo test --features microsoft-store
+      - name: Package preview
+        if: github.event_name != 'workflow_dispatch' || !inputs.submission
+        run: ./scripts/build-msix.ps1 -Version $env:GATIT_VERSION
+      - name: Package for Partner Center
+        if: github.event_name == 'workflow_dispatch' && inputs.submission
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER_ID: ${{ vars.STORE_PUBLISHER_ID }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Submission packages require main' }
+          ./scripts/build-msix.ps1 -Version $env:GATIT_VERSION -Submission
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.submission && 'Store-submission' || 'CI-preview' }}-MSIX
+          path: store-artifacts/*
+          if-no-files-found: error
