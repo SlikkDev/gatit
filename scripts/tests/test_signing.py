@@ -36,10 +36,14 @@ class BuildConfigTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             config = json.loads(p.stdout)
             self.assertFalse(config['bundle']['createUpdaterArtifacts'])
-            self.assertNotIn('windows', config['bundle'])
             if platform == 'macos':
+                self.assertNotIn('windows', config['bundle'])
                 self.assertEqual(config['bundle']['macOS']['signingIdentity'], '-')
                 self.assertFalse(config['bundle']['macOS']['hardenedRuntime'])
+            else:
+                command = config['bundle']['windows']['signCommand']
+                self.assertTrue(Path(command['args'][3]).is_absolute())
+                self.assertEqual(Path(command['args'][3]).name, 'inspect-signing-input.ps1')
 
     def test_every_missing_release_field_blocks_output(self):
         for platform, values in [('macos', MAC), ('windows', WIN), ('windows', SIGNPATH)]:
@@ -65,6 +69,7 @@ class BuildConfigTests(unittest.TestCase):
         command = json.loads(p.stdout)['bundle']['windows']['signCommand']
         self.assertEqual(command['cmd'], 'pwsh')
         self.assertEqual(command['args'][-1], '%1')
+        self.assertTrue(Path(command['args'][3]).is_absolute())
         self.assertTrue((ROOT / 'app/src-tauri' / command['args'][3]).is_file())
 
     def test_unknown_modes_and_platforms_rejected(self):

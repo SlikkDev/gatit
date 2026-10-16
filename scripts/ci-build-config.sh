@@ -14,6 +14,12 @@ require() {
   [ "$missing" -eq 0 ]
 }
 updater=false
+# NSIS executes !uninstfinalize from its output directory, not src-tauri.
+# Both the release signer and the CI inspection callback need native absolute paths.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+hook="$script_dir/sign-windows.ps1"
+[ "$mode" != ci ] || hook="$script_dir/inspect-signing-input.ps1"
+if command -v cygpath >/dev/null 2>&1; then hook="$(cygpath -w "$hook")"; fi
 if [ "$mode" = release ]; then
   if [ "$platform" = macos ]; then
     require APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
@@ -37,13 +43,13 @@ if [ "$mode" = release ]; then
   [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ] || updater=true
 fi
 jq -n --arg version "$version" --arg platform "$platform" --arg mode "$mode" \
-  --arg identity "${APPLE_SIGNING_IDENTITY:-}" --argjson updater "$updater" '
+  --arg identity "${APPLE_SIGNING_IDENTITY:-}" --arg hook "$hook" --argjson updater "$updater" '
   {version: $version, bundle: {createUpdaterArtifacts: $updater}}
   | if $platform == "macos" then
       .bundle.macOS = (if $mode == "release" then
         {signingIdentity: $identity, hardenedRuntime: true, entitlements: "Entitlements.plist"}
         else {signingIdentity: "-", hardenedRuntime: false} end)
-    elif $mode == "release" then
+    else
       .bundle.windows = {signCommand: {cmd: "pwsh", args:
-        ["-NoProfile", "-NonInteractive", "-File", "../../scripts/sign-windows.ps1", "-Path", "%1"]}}
-    else . end'
+        ["-NoProfile", "-NonInteractive", "-File", $hook, "-Path", "%1"]}}
+    end'

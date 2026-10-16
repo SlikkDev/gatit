@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           scripts/ci-build-config.sh "$GATIT_VERSION" windows ci > build-config.json
-          jq -s '.[0] * .[1]' build-config.json app/src-tauri/tauri.store.conf.json > store-build-config.json
+          jq -s '.[0] * .[1] | del(.bundle.windows.signCommand)' build-config.json app/src-tauri/tauri.store.conf.json > store-build-config.json
       - name: Build Store edition without the direct-download updater
         working-directory: app/src-tauri
         run: cargo tauri build --no-bundle --features microsoft-store --config ../../store-build-config.json
