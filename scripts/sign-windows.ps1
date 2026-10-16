@@ -6,6 +6,14 @@ Set-StrictMode -Version Latest
 if ($env:WINDOWS_SIGNING_PROVIDER -eq 'signpath-foundation') {
     $root = Split-Path -Parent $PSScriptRoot
     $file = Get-Item -LiteralPath $Path
+    # Tauri also invokes its hook for unsigned externalBin sidecars. Preserve the
+    # same two approved upstream binaries here, after verifying this build's receipt.
+    if ($file.Name -cmatch '^whisper-(cli|quantize)-x86_64-pc-windows-msvc\.exe$') {
+        python "$PSScriptRoot/upstream-integrity.py" verify $file.DirectoryName "$root/app/src-tauri/binaries/whisper-provenance.json" --suffixed
+        if ($LASTEXITCODE -ne 0) { throw 'Upstream Whisper signing input differs from the pinned build' }
+        Write-Host "Preserved verified upstream binary without re-signing: $($file.Name)"
+        return
+    }
     if ($file.Extension -ieq '.dll') {
         if ($env:SIGNPATH_NSIS_UPSTREAM_APPROVED -ne 'true') {
             throw 'NSIS upstream DLL exception awaits explicit owner approval'

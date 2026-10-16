@@ -6,7 +6,7 @@ $installer = @(Get-ChildItem "$root/app/src-tauri/target/release/bundle/nsis/*-s
 if ($installer.Count -ne 1) { throw 'Expected one NSIS installer' }
 if ($env:GATIT_MODE -eq 'ci') {
     $records = @(Get-Content "$root/.build/ci-signing-inputs.jsonl" | ForEach-Object { $_ | ConvertFrom-Json })
-    foreach ($role in 'app', 'uninstaller', 'installer', 'NSISdl.dll', 'StartMenu.dll', 'System.dll', 'nsDialogs.dll', 'nsis_tauri_utils.dll') {
+    foreach ($role in 'app', 'recorder', 'uninstaller', 'installer', 'whisper-cli-x86_64-pc-windows-msvc.exe', 'whisper-quantize-x86_64-pc-windows-msvc.exe', 'NSISdl.dll', 'StartMenu.dll', 'System.dll', 'nsDialogs.dll', 'nsis_tauri_utils.dll') {
         if (@($records | Where-Object role -eq $role).Count -ne 1) {
             throw "Missing/duplicated real Tauri/NSIS callback: $role"
         }

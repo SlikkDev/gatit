@@ -6,7 +6,11 @@ if ($env:GATIT_MODE -ne 'ci') { throw 'Inspection callback cannot replace releas
 $root = Split-Path -Parent $PSScriptRoot
 $file = Get-Item -LiteralPath $Path
 $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($file.Extension -ieq '.dll') {
+if ($file.Name -cmatch '^whisper-(cli|quantize)-x86_64-pc-windows-msvc\.exe$') {
+    python "$PSScriptRoot/upstream-integrity.py" verify $file.DirectoryName "$root/app/src-tauri/binaries/whisper-provenance.json" --suffixed
+    if ($LASTEXITCODE -ne 0) { throw 'Wrong upstream signing input' }
+    $role = $file.Name
+} elseif ($file.Extension -ieq '.dll') {
     $lock = Get-Content "$root/packaging/windows/nsis-upstream.json" -Raw | ConvertFrom-Json -AsHashtable
     if (-not $lock.files.ContainsKey($file.Name) -or $hash -cne $lock.files[$file.Name]) {
         throw "Unexpected upstream helper in CI: $($file.Name)"
@@ -18,6 +22,7 @@ if ($file.Extension -ieq '.dll') {
     }
     $role = switch -Regex ($file.Name) {
         '^gatit\.exe$' { 'app'; break }
+        '^gatit-recorder-x86_64-pc-windows-msvc\.exe$' { 'recorder'; break }
         '-setup\.exe$' { 'installer'; break }
         default { 'uninstaller' }
     }
