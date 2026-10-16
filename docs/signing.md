@@ -30,56 +30,58 @@ Set these **repository Actions variables**:
 
 `verify-macos.sh` checks every native executable, the expected team, Developer ID authority, hardened runtime, timestamp, stapled ticket, and Gatekeeper assessment. The collector repeats verification on a fresh extraction of the user ZIP and, if present, the updater archive. Nothing launches the app. Local development can continue using the ad-hoc platform configuration.
 
-### Windows: choose an eligible provider first
+### Windows: free distribution paths
 
-The publisher's legal identity and country determine the available services. **No provider has been selected or enrolled for Gatit.** The draft contains an Azure adapter, gated by an explicit `WINDOWS_SIGNING_PROVIDER=azure-artifact-signing` choice. For another provider, replace the signing adapter and its authentication steps before merging; keep the Authenticode publisher/timestamp verification and release hash gates. Missing or unimplemented provider choices fail before login or signing.
+The selected plan is **SignPath Foundation for direct downloads plus Microsoft Store MSIX**. Both require acceptance/verification before distribution. No paid subscription is authorized. The older Azure adapter remains available only under its explicit provider value; nothing in this change enrolls or activates it.
 
-Options checked against official sources on 2026-10-14:
+[SignPath Foundation](https://signpath.org/terms) offers free signing to accepted open-source projects. Its publisher certificate, reputation review, MFA, manual approvals and source-verifiable builds are requirements. Gatit is a new project; acceptance is not guaranteed. See the proposed [code signing policy](https://slikkdev.github.io/gatit/code-signing.html) and [privacy policy](https://slikkdev.github.io/gatit/privacy.html). Do not state that Gatit already receives Foundation signing until acceptance and a verified release.
 
-| Option | Eligibility and costs | Gatit readiness |
+After acceptance and owner approval, configure these repository Actions references:
+
+| Kind | Name | Value |
 | --- | --- | --- |
-| [Microsoft Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart) | Public Trust includes **Israeli organizations**; **individuals only in the US or Canada**. A VAT-registered sole proprietor must not be assumed to qualify as an organization. Paid Azure subscription and identity validation required. Regional price still needs a quote. | Adapter prepared, but unsuitable for an Israeli individual. Publisher eligibility and owner selection remain pending. |
-| [SSL.com IV](https://www.ssl.com/products/software-integrity/code-signing/iv/) or [OV](https://www.ssl.com/products/software-integrity/code-signing/ov/) with [eSigner](https://www.ssl.com/products/software-integrity/signing-service/) | IV is for individuals, OV for organizations. Israel is in the [accepted certificate country list](https://www.ssl.com/country-codes/); issuance still requires [identity/address validation](https://www.ssl.com/faqs/ssl-ov-validation-requirements/). Published one-year IV/OV certificate price: **USD 129/year**. Cloud signing is extra; the page displays a starting **USD 15/month** tier with an annual billing selection. Confirm billing term, quotas and tax before purchase. | Plausible paid route for either Israeli publisher type. Its CI signing adapter and approved credentials would need to be configured after selection. |
-| [SignPath Foundation](https://signpath.org/) | **Free for accepted open-source projects**, using the Foundation's publisher certificate. Acceptance is discretionary under its [terms](https://signpath.org/terms), including project reputation, source/build verification, MFA, release approvers and manual signing approval. | Gatit has a public MIT repository, documentation and releases. Acceptance is unconfirmed. Its upstream whisper executables need review: the terms generally permit signing only the project's own code, not upstream binaries. Do not sign those under a Foundation certificate without an accepted policy. |
-| [Certum Open Source in the Cloud](https://shop.certum.eu/open-source-code-signing-on-simplysign.html) | Lists **from EUR 49**, but its product page currently says **out of stock**. Uses SimplySign mobile/desktop authentication. | Not a currently available purchase path; Israeli issuance and unattended CI suitability also remain unverified. |
+| Variable | `WINDOWS_SIGNING_PROVIDER` | `signpath-foundation` |
+| Secret | `SIGNPATH_API_TOKEN` | Owner-entered token restricted to the accepted signing policy |
+| Variable | `SIGNPATH_ORGANIZATION_ID` | Organization ID issued by SignPath |
+| Variable | `SIGNPATH_PROJECT_SLUG` | Approved Gatit project slug |
+| Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | Release policy requiring a human approver |
+| Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | Configuration created from `packaging/windows/signpath-artifact.xml` |
+| Variable | `WINDOWS_PUBLISHER_SUBJECT` | Exact accepted certificate subject returned by Windows; do not guess it |
+| Variable | `SIGNPATH_NSIS_UPSTREAM_APPROVED` | `true` only after explicit approval of the five named, pinned upstream DLL exceptions below |
 
-No application, purchase, identity submission, account creation or access grant has been made for any option. Reuse an existing approved service where available.
+The owner must approve any SignPath/GitHub access grant and enter credentials directly. Never paste tokens into chat. Configure trusted GitHub builds for this repository, GitHub-hosted runners and `main`; configure the Foundation-approved certificate and approver. Confirm with SignPath that the nested official-action integration and artifact policy are accepted before relying on it for production.
 
-### Prepared Azure adapter
+The Tauri signing hook runs the **pinned official GitHub upload action and SignPath action** inside a Node GitHub action so the uploader receives the runner's ephemeral artifact credentials. CI exercises the same absolute-path Tauri/NSIS callbacks with a non-signing inspection script, including the generated uninstaller. This callback refuses release mode. Each first-party PE is uploaded with GitHub-origin evidence and restricted to `ProductName=Gatit` and the current `ProductVersion`. It waits up to one hour for each approval. Four requests are expected: recorder, app, NSIS uninstaller, installer. Signing must not change executable content outside the Authenticode table/checksum. Windows then verifies trust, exact publisher, code-signing EKU and timestamp. Retained signed bytes and static installer extraction are checked before the existing release hash gate. No installer is launched by these checks.
 
-The integration uses Microsoft's [Artifact Signing](https://learn.microsoft.com/en-us/azure/artifact-signing/overview) service (formerly Trusted Signing), a **Public Trust** certificate profile, and the official `ArtifactSigning` PowerShell module pinned to 0.1.20. Private Trust and test profiles are unsuitable for public downloads.
+**Upstream exceptions:** `whisper-cli.exe` and `whisper-quantize.exe` are built afresh from the exact whisper.cpp commit in `packaging/windows/upstream.json`. Their license and a source/commit/SHA-256 receipt are included in the package. Both hashes must survive packaging unchanged. They are not sent to SignPath as Gatit's code.
 
-The account owner must provide an Azure subscription, Entra tenant, an Artifact Signing account with completed identity validation, a Public Trust profile, and a signing identity. Confirm [current geographic eligibility](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart) before creating a paid resource: currently individuals must be in the US or Canada; organizations have a broader listed set of countries, including Israel. An individual's residence or an organization's eligibility must not be inferred from this repository.
+Tauri 2.12.3 also asks its hook to sign five upstream NSIS DLLs: `NSISdl.dll`, `StartMenu.dll`, `System.dll`, `nsDialogs.dll`, and `nsis_tauri_utils.dll`. They may only be preserved unsigned after separate owner approval, and only when every byte matches `packaging/windows/nsis-upstream.json`. An unknown or modified DLL fails. Approval of Whisper does not automatically approve these helpers. Gatit's app, recorder, installer and uninstaller still require signatures.
 
-The owner configures GitHub OIDC federation, scoped exactly to:
+### Microsoft Store MSIX
 
-- Issuer: `https://token.actions.githubusercontent.com`
-- Audience: `api://AzureADTokenExchange`
-- Subject: `repo:SlikkDev/gatit:ref:refs/heads/main`
-- RBAC: **Artifact Signing Certificate Profile Signer**, scoped to the chosen profile, not subscription-wide administration.
+[Microsoft's current onboarding flow](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account) has no registration fee for either Individual or Company accounts when started at [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com/). Company registration requires business and contact verification and agreement acceptance. The account owner completes those steps; this repository does not create an account or accept terms.
 
-This is a persistent access grant requiring owner approval. The workflow requests a short-lived token via `azure/login`; no Azure client secret is stored. Do not grant the PR subject or a wildcard subject access. Restrict changes to `main` and review workflow changes before merging.
+`Microsoft Store package` builds a separate edition with `--features microsoft-store`. The direct-download updater module and plugin initialization are excluded. Store builds cannot download or launch the NSIS updater. The package includes the recorder and the same pinned Whisper tools. Windows SDK MakeAppx validates it, unpacks it and compares every payload hash without installing it.
 
-Set these **repository Actions variables**:
+PR/main CI produces `CI-preview-MSIX` with a deliberately nonproduction identity. **Do not distribute or submit that preview.** After reserving Gatit in Partner Center, copy the exact identity values to these non-secret repository variables:
 
-| Variable | Required value |
-| --- | --- |
-| `WINDOWS_SIGNING_PROVIDER` | `azure-artifact-signing`, only after the owner selects this service and confirms eligibility |
-| `AZURE_CLIENT_ID` | Federated signing identity's client ID |
-| `AZURE_TENANT_ID` | Entra tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Subscription containing the signing account |
-| `AZURE_SIGNING_ENDPOINT` | Regional HTTPS signing endpoint from the account |
-| `AZURE_SIGNING_ACCOUNT` | Artifact Signing account name |
-| `AZURE_CERTIFICATE_PROFILE` | Public Trust certificate profile name |
-| `WINDOWS_PUBLISHER_SUBJECT` | Exact certificate subject string for the approved publisher, as returned by Windows `SignerCertificate.Subject` |
+- `STORE_IDENTITY_NAME`: Package/Identity/Name.
+- `STORE_PUBLISHER_ID`: Package/Identity/Publisher, including the full `CN=...` string.
+- `STORE_PUBLISHER_DISPLAY_NAME`: publisher display name shown by Partner Center.
 
-The build signs and verifies all three native sidecars before packaging. Tauri's `signCommand` signs the main app, NSIS uninstaller and outer installer; the hook verifies each result. Signing uses SHA-256 and Microsoft's RFC 3161 timestamp endpoint. The final collected installer is checked again before recording its hash. Authenticode precedes Tauri's updater signature, so the updater authenticates the final signed bytes.
+Dispatch `Microsoft Store package` on `main` with `submission=true` to obtain `Store-submission-MSIX`. It remains unsigned; [Microsoft Store signs MSIX packages during its publication process](https://learn.microsoft.com/en-us/windows/msix/package/signing-package-overview). It is not a signed GitHub download. Complete the Store listing, privacy URL, age ratings, capability explanations and certification in Partner Center before making a Store link public. No Store submission is automated here.
 
-[Microsoft's integration documentation](https://learn.microsoft.com/en-us/azure/artifact-signing/how-to-signing-integrations) describes the service/module requirements. Its [official price page](https://azure.microsoft.com/en-us/pricing/details/artifact-signing/) lists Basic with 5,000 signatures/month and Premium with 100,000. The page's dollar amounts were not available in the retrieved pricing table on 2026-10-14; confirm an actual regional quote before approving payment. Billing begins when the signing account is created, and the page states that the monthly charge is not prorated.
+Store package versions map app `major.minor.patch` to `(major+1).minor.patch.0` because Store requires a nonzero first field and reserves the fourth. For example, `0.2.17` becomes `1.2.17.0`. The Store workflow has its own monotonically increasing run number; it is separate from the direct-download workflow. Before the first submission, confirm its package version exceeds any prior Partner Center package version. Keep it below the 16-bit field limits.
 
-If the publisher is ineligible, use an existing eligible CA-issued code-signing service or hardware-backed certificate and adapt `sign-windows.ps1` to that provider. Do not substitute a self-signed certificate or a new exportable software key for public Windows signing.
+The MSIX currently targets x64 Windows 10 version 2004 or newer. It requires WebView2. A native startup check opens Microsoft's official runtime download page only if the user chooses to, then exits; it does not launch an installer. App Installer can also interpret the manifest's external dependency; Store deployment may ignore that declaration. Windows App Certification Kit and clean-machine launch/recording/privacy checks remain prerequisites for public availability. Use Microsoft's [private audience](https://learn.microsoft.com/en-us/windows/apps/publish/beta-testing-and-targeted-distribution) option for Store-signed runtime testing before public release. The unsigned CI preview is not an installation path. Packaging CI does not claim runtime certification.
 
-A valid signature identifies the publisher; it cannot guarantee every SmartScreen reputation or organization-policy decision. Investigate a warning and verify the release/publisher rather than bypassing the protection.
+The MSIX and NSIS editions have distinct installation/update ownership. Back up the meetings folder before switching editions; this PR does not implement a data migration or guarantee that Windows package virtualization exposes the same library. Remove the old edition through Windows Settings after preserving the data. Uninstall the Store edition through Windows Settings/Microsoft Store.
+
+### Existing paid adapter (inactive)
+
+`azure-artifact-signing` remains explicit opt-in for an already authorized service. It requires `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_SIGNING_ENDPOINT`, `AZURE_SIGNING_ACCOUNT`, `AZURE_CERTIFICATE_PROFILE` and `WINDOWS_PUBLISHER_SUBJECT` repository variables. Its OIDC subject is `repo:SlikkDev/gatit:ref:refs/heads/main`, with only the profile signer role. The workflow uses the official ArtifactSigning 0.1.20 module. No paid Azure setup is part of the selected plan.
+
+A valid signature identifies the publisher; it does not guarantee every SmartScreen reputation or organization-policy decision. Investigate the warning and release identity without bypassing the protection.
 
 ## Optional in-app update signatures
 

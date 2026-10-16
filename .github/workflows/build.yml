@@ -36,7 +36,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev
       - name: Release pipeline regression tests
-        run: python3 -m unittest discover -s scripts/tests -v
+        run: |
+          python3 -m unittest discover -s scripts/tests -v
+          node --test scripts/tests/*.test.cjs
       - name: App format and lint
         working-directory: app/src-tauri
         run: |
@@ -44,7 +46,10 @@ jobs:
           cargo clippy --tests -- -D warnings
       - name: App unit tests (transcript merge, Hebrew search, summary parsing)
         working-directory: app/src-tauri
-        run: cargo test
+        run: |
+          cargo test
+          cargo clippy --tests --features microsoft-store -- -D warnings
+          cargo test --features microsoft-store
       - name: Windows recorder format, lint (for Windows too) and tests
         working-directory: recorder-win
         run: |
@@ -101,7 +106,7 @@ jobs:
       - name: Build whisper.cpp
         run: scripts/build-whisper-mac.sh ${{ matrix.target }}
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: cargo install tauri-cli --version 2.12.3 --locked
       - name: Build app bundle
         working-directory: app/src-tauri
         run: cargo tauri build --target ${{ matrix.target }} --bundles app --config ../../build-config.json
@@ -122,16 +127,25 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - name: Test Authenticode failure handling
         shell: pwsh
-        run: ./scripts/tests/verify-windows.tests.ps1
+        run: |
+          ./scripts/tests/verify-windows.tests.ps1
+          ./scripts/tests/signing-hook.tests.ps1
       - name: Expose release configuration
         if: env.GATIT_MODE == 'release'
         shell: bash
         env:
           WINDOWS_SIGNING_PROVIDER: ${{ vars.WINDOWS_SIGNING_PROVIDER }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          SIGNPATH_NSIS_UPSTREAM_APPROVED: ${{ vars.SIGNPATH_NSIS_UPSTREAM_APPROVED }}
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -141,7 +155,7 @@ jobs:
           WINDOWS_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_PUBLISHER_SUBJECT }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: bash scripts/ci-export-secrets.sh WINDOWS_SIGNING_PROVIDER AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+        run: bash scripts/ci-export-secrets.sh WINDOWS_SIGNING_PROVIDER SIGNPATH_API_TOKEN SIGNPATH_ORGANIZATION_ID SIGNPATH_PROJECT_SLUG SIGNPATH_SIGNING_POLICY_SLUG SIGNPATH_ARTIFACT_CONFIGURATION_SLUG SIGNPATH_NSIS_UPSTREAM_APPROVED AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_SIGNING_ENDPOINT AZURE_SIGNING_ACCOUNT AZURE_CERTIFICATE_PROFILE WINDOWS_PUBLISHER_SUBJECT TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
       - name: Require Authenticode configuration for releases
         shell: bash
         run: bash scripts/ci-build-config.sh "$GATIT_VERSION" windows "$GATIT_MODE" > build-config.json
@@ -151,49 +165,54 @@ jobs:
           workspaces: |
             app/src-tauri
             recorder-win
-      - name: Cache whisper.cpp build
-        uses: actions/cache@v4
-        with:
-          path: .build/whisper.cpp
-          key: whisper-cpp-x86_64-pc-windows-msvc-${{ hashFiles('scripts/build-whisper-windows.ps1') }}
       - name: Build recorder
         run: ./scripts/build-recorder-windows.ps1
       - name: Build whisper.cpp
         run: ./scripts/build-whisper-windows.ps1
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
+        run: cargo install tauri-cli --version 2.12.3 --locked
       - name: Sign in to Azure with GitHub OIDC
-        if: env.GATIT_MODE == 'release'
+        if: env.GATIT_MODE == 'release' && env.WINDOWS_SIGNING_PROVIDER == 'azure-artifact-signing'
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Install Microsoft's signing module
-        if: env.GATIT_MODE == 'release'
+        if: env.GATIT_MODE == 'release' && env.WINDOWS_SIGNING_PROVIDER == 'azure-artifact-signing'
         shell: pwsh
         run: Install-Module -Name ArtifactSigning -RequiredVersion 0.1.20 -Scope CurrentUser -Force -Repository PSGallery
-      - name: Sign and verify native sidecars before bundling
+      - name: Read pinned official GitHub artifact uploader
+        if: env.GATIT_MODE == 'release' && env.WINDOWS_SIGNING_PROVIDER == 'signpath-foundation'
+        uses: actions/checkout@v4
+        with:
+          repository: actions/upload-artifact
+          ref: ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          path: .build/upload-action
+          persist-credentials: false
+      - name: Read pinned official SignPath action
+        if: env.GATIT_MODE == 'release' && env.WINDOWS_SIGNING_PROVIDER == 'signpath-foundation'
+        uses: actions/checkout@v4
+        with:
+          repository: SignPath/github-action-submit-signing-request
+          ref: f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+          path: .build/signpath-action
+          persist-credentials: false
+      - name: Build CI installer
+        if: env.GATIT_MODE != 'release'
+        uses: ./.github/actions/build-windows
+      - name: Build and sign release installer
+        if: env.GATIT_MODE == 'release'
+        uses: ./.github/actions/build-windows
+        env:
+          SIGNPATH_GITHUB_TOKEN: ${{ github.token }}
+      - name: Inspect CI installer payload without execution
+        if: env.GATIT_MODE != 'release'
+        run: ./scripts/inspect-windows-payload.ps1
+      - name: Verify app, installer and packaged upstream files without executing them
         if: env.GATIT_MODE == 'release'
         shell: pwsh
-        run: |
-          foreach ($name in 'gatit-recorder', 'whisper-cli', 'whisper-quantize') {
-            ./scripts/sign-windows.ps1 -Path "app/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
-          }
-      - name: Build installer
-        working-directory: app/src-tauri
-        run: cargo tauri build --bundles nsis --config ../../build-config.json
-      - name: Verify app, installer and sidecars without executing them
-        if: env.GATIT_MODE == 'release'
-        shell: pwsh
-        run: |
-          ./scripts/verify-windows.ps1 -Path app/src-tauri/target/release/gatit.exe
-          $installers = @(Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe)
-          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
-          ./scripts/verify-windows.ps1 -Path $installers[0].FullName
-          foreach ($name in 'gatit-recorder', 'whisper-cli', 'whisper-quantize') {
-            ./scripts/verify-windows.ps1 -Path "app/src-tauri/binaries/$name-x86_64-pc-windows-msvc.exe"
-          }
+        run: ./scripts/verify-windows-package.ps1
       - name: Collect the installer and the update signature
         shell: bash
         run: bash scripts/ci-collect-windows.sh "$GATIT_MODE"

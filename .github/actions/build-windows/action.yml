@@ -1,0 +1,5 @@
+name: Build Windows with signing hooks
+description: Run the bundler in a JavaScript action so nested signing hooks can upload GitHub artifacts through the official action.
+runs:
+  using: node24
+  main: index.js

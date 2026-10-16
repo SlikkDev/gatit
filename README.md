@@ -6,7 +6,7 @@ A personal Mac and Windows app that records, transcribes and summarizes Zoom, Go
 
 1. **Record** when a call starts: on the Mac, Gatit notices Zoom, WhatsApp or a browser (Google Meet) starting to use the microphone and shows a small "Record this call?" pop-up in the top-right corner. Or record with one click, from the menu bar or system tray, or with a keyboard shortcut (Control-Option-Command-R on the Mac, Ctrl-Alt-Shift-R on Windows, by default). Your microphone is saved as "Me" and everything the computer plays as "Them", in two files, so the transcript knows who said what with no speaker-detection AI.
    Set your name in Settings and it replaces "Me". The other people on a call are listed on the call (type them in, or let Gatit fill them in: from the call app's window when it starts, and from what Claude hears in the conversation). With one other person on the call, their lines carry their name; on a group call the other side stays "Them", since everyone else shares one track.
-2. **Transcribe** on your own machine with whisper.cpp and [ivrit.ai](https://huggingface.co/ivrit-ai)'s Hebrew fine-tune of Whisper. Hebrew calls with English terms mixed in keep those terms in English letters: a built-in list of about 200 business, marketing and tech terms Israelis say in English (CRO, ROI, KPI, profit share, landing page, LinkedIn...), plus your own terms in Settings. Acronyms are recognized when spelled out letter by letter ("קיי פי איי" becomes KPI). Everyday loanwords Israelis write in Hebrew (מייל, פידבק, דדליין) stay in Hebrew. English-only calls use the stock English model. Audio never leaves the machine.
+2. **Transcribe** on your own machine with whisper.cpp and [ivrit.ai](https://huggingface.co/ivrit-ai)'s Hebrew fine-tune of Whisper. Hebrew calls with English terms mixed in keep those terms in English letters: a built-in list of about 200 business, marketing and tech terms Israelis say in English (CRO, ROI, KPI, profit share, landing page, LinkedIn...), plus your own terms in Settings. Acronyms are recognized when spelled out letter by letter ("קיי פי איי" becomes KPI). Everyday loanwords Israelis write in Hebrew (מייל, פידבק, דדליין) stay in Hebrew. English-only calls use the stock English model. Audio is processed locally for transcription; optional Google Drive uploads can send recordings to your own Drive.
 3. **Summarize** with Claude: a title, overview, who was on the call, key points, decisions, action items (yours, or by the name of whoever took them) and open questions, always in English. Only the transcript text is sent, with the names it already knows. Your API key lives in the macOS Keychain or the Windows Credential Manager.
 4. **Library**: all calls in one list, grouped by day, with search across every transcript and summary. Hebrew search finds words with or without attached prefix letters (ה, ו, ב, ש...). Click a transcript line to hear that moment. Export any call as Markdown.
 5. **Google Drive**: every call is uploaded to your Drive as `Gatit / date / time and title`, with the recording, transcript and summary, as soon as it is recorded and again when it changes. Set up once with your own Google Cloud OAuth client: see [docs/google-drive.md](docs/google-drive.md).
@@ -31,6 +31,8 @@ This repository is public. Recordings, transcripts and API keys never live in it
 
 Some places require telling the other people on a call that you are recording.
 
+See the full [privacy policy](https://slikkdev.github.io/gatit/privacy.html) for network requests, optional cloud services, storage and deletion.
+
 ## Getting the app
 
 The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/gatit/). A release is published only after macOS signing/notarization and Windows Authenticode verification pass. Check the [release notes](https://github.com/SlikkDev/gatit/releases/tag/latest) for verification before installing; older unsigned builds are awaiting replacement. Download the one for your machine (on a Mac, Apple menu → About This Mac shows the chip):
@@ -38,6 +40,8 @@ The short version is at [slikkdev.github.io/gatit](https://slikkdev.github.io/ga
 - **Gatit-macos-apple-silicon.zip** for a Mac with an Apple chip (M1 or later).
 - **Gatit-macos-intel.zip** for an Intel Mac, such as a 2019 MacBook Pro.
 - **Gatit-windows-setup.exe** for Windows.
+
+A free Windows signing path through SignPath Foundation and a separate Microsoft Store edition are being prepared. Neither is available as a verified signed release yet. See the [Code signing policy](https://slikkdev.github.io/gatit/code-signing.html) and [maintainer setup](docs/signing.md).
 
 ### Mac
 

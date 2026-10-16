@@ -18,6 +18,10 @@ MAC = dict(APPLE_CERTIFICATE='private-p12-fixture', APPLE_CERTIFICATE_PASSWORD='
 WIN = dict.fromkeys(['AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID', 'AZURE_SIGNING_ENDPOINT',
                      'AZURE_SIGNING_ACCOUNT', 'AZURE_CERTIFICATE_PROFILE', 'WINDOWS_PUBLISHER_SUBJECT'], 'fixture')
 WIN['WINDOWS_SIGNING_PROVIDER'] = 'azure-artifact-signing'
+SIGNPATH = dict.fromkeys(['SIGNPATH_API_TOKEN', 'SIGNPATH_ORGANIZATION_ID', 'SIGNPATH_PROJECT_SLUG',
+                         'SIGNPATH_SIGNING_POLICY_SLUG', 'SIGNPATH_ARTIFACT_CONFIGURATION_SLUG',
+                         'WINDOWS_PUBLISHER_SUBJECT'], 'fixture')
+SIGNPATH.update(WINDOWS_SIGNING_PROVIDER='signpath-foundation', SIGNPATH_NSIS_UPSTREAM_APPROVED='true')
 
 
 class BuildConfigTests(unittest.TestCase):
@@ -32,13 +36,17 @@ class BuildConfigTests(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             config = json.loads(p.stdout)
             self.assertFalse(config['bundle']['createUpdaterArtifacts'])
-            self.assertNotIn('windows', config['bundle'])
             if platform == 'macos':
+                self.assertNotIn('windows', config['bundle'])
                 self.assertEqual(config['bundle']['macOS']['signingIdentity'], '-')
                 self.assertFalse(config['bundle']['macOS']['hardenedRuntime'])
+            else:
+                command = config['bundle']['windows']['signCommand']
+                self.assertTrue(Path(command['args'][3]).is_absolute())
+                self.assertEqual(Path(command['args'][3]).name, 'inspect-signing-input.ps1')
 
     def test_every_missing_release_field_blocks_output(self):
-        for platform, values in [('macos', MAC), ('windows', WIN)]:
+        for platform, values in [('macos', MAC), ('windows', WIN), ('windows', SIGNPATH)]:
             for key in values:
                 with self.subTest(platform=platform, missing=key):
                     p = self.config(platform, 'release', {k: v for k, v in values.items() if k != key})
@@ -61,6 +69,7 @@ class BuildConfigTests(unittest.TestCase):
         command = json.loads(p.stdout)['bundle']['windows']['signCommand']
         self.assertEqual(command['cmd'], 'pwsh')
         self.assertEqual(command['args'][-1], '%1')
+        self.assertTrue(Path(command['args'][3]).is_absolute())
         self.assertTrue((ROOT / 'app/src-tauri' / command['args'][3]).is_file())
 
     def test_unknown_modes_and_platforms_rejected(self):
@@ -72,6 +81,13 @@ class BuildConfigTests(unittest.TestCase):
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('WINDOWS_SIGNING_PROVIDER', p.stderr)
         self.assertEqual(p.stdout, '')
+
+    def test_signpath_needs_no_azure_credentials_but_requires_explicit_exception(self):
+        p = self.config('windows', 'release', SIGNPATH)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        for value in ['', 'false', 'yes']:
+            p = self.config('windows', 'release', {**SIGNPATH, 'SIGNPATH_NSIS_UPSTREAM_APPROVED': value})
+            self.assertNotEqual(p.returncode, 0)
 
 
 class ReleaseGateTests(unittest.TestCase):
