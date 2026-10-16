@@ -18,7 +18,9 @@ pub fn check_runtime() -> bool {
     if tauri::webview_version().is_ok() {
         return true;
     }
-    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONINFORMATION, MB_YESNO};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, IDYES, MB_ICONINFORMATION, MB_YESNO,
+    };
     let text: Vec<u16> = "Gatit needs the Microsoft Edge WebView2 Runtime. Open Microsoft's download page to install it, then reopen Gatit?\0"
         .encode_utf16()
         .collect();
