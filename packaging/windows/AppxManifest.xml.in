@@ -11,7 +11,7 @@
     <Description>Record and transcribe calls locally, with optional summaries and Google Drive uploads.</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
-  <Resources><Resource Language="en-us" /><Resource Language="he-il" /></Resources>
+  <Resources><Resource Language="en-us" /></Resources>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
     <!-- App Installer honors this; Store/other deployment paths may ignore it.

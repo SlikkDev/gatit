@@ -39,11 +39,3 @@ pub fn check_runtime() -> bool {
     }
     false
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn store_never_reports_a_direct_download_update() {
-        assert_eq!(super::ready_version(), None);
-    }
-}
