@@ -36,7 +36,7 @@ fi
   echo "Pick **Gatit-macos-apple-silicon.zip**, **Gatit-macos-intel.zip**, or **Gatit-windows-setup.exe** for your machine."
   echo
   echo "Both Mac builds passed Developer ID, hardened runtime, timestamp, notarization ticket and Gatekeeper checks, including their embedded helpers and extracted download archives."
-  echo "Windows binaries and the NSIS installer passed Authenticode publisher and timestamp checks. SmartScreen reputation and organization policy can still affect a newly signed release."
+  echo "Gatit's Windows app, recorder, NSIS installer and uninstaller passed Authenticode publisher and timestamp checks. See the [signing policy](https://github.com/$repo/blob/main/docs/signing.md) for approved upstream helper exceptions. SmartScreen reputation and organization policy can still affect a newly signed release."
   echo "The verification JSON files record the build commit, publisher and SHA-256 hashes."
   echo
   if [ -f "$dist/latest.json" ]; then
