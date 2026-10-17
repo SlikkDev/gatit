@@ -47,7 +47,7 @@ After acceptance and owner approval, configure these repository Actions referenc
 | Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | Release policy requiring a human approver |
 | Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | Configuration created from `packaging/windows/signpath-artifact.xml` |
 | Variable | `WINDOWS_PUBLISHER_SUBJECT` | Exact accepted certificate subject returned by Windows; do not guess it |
-| Variable | `SIGNPATH_NSIS_UPSTREAM_APPROVED` | `true` only after explicit approval of the five named, pinned upstream DLL exceptions below |
+| Variable | `SIGNPATH_NSIS_UPSTREAM_APPROVED` | `true` records the owner's 17 October 2026 approval of the five exact pinned upstream DLLs below; it does not enable a signing provider or bypass first-party signatures |
 
 The owner must approve any SignPath/GitHub access grant and enter credentials directly. Never paste tokens into chat. Configure trusted GitHub builds for this repository, GitHub-hosted runners and `main`; configure the Foundation-approved certificate and approver. Confirm with SignPath that the nested official-action integration and artifact policy are accepted before relying on it for production.
 
@@ -55,7 +55,7 @@ The Tauri signing hook runs the **pinned official GitHub upload action and SignP
 
 **Upstream exceptions:** `whisper-cli.exe` and `whisper-quantize.exe` are built afresh from the exact whisper.cpp commit in `packaging/windows/upstream.json`. Their license and a source/commit/SHA-256 receipt are included in the package. Both hashes must survive packaging unchanged. They are not sent to SignPath as Gatit's code.
 
-Tauri 2.12.3 also asks its hook to sign five upstream NSIS DLLs: `NSISdl.dll`, `StartMenu.dll`, `System.dll`, `nsDialogs.dll`, and `nsis_tauri_utils.dll`. They may only be preserved unsigned after separate owner approval, and only when every byte matches `packaging/windows/nsis-upstream.json`. An unknown or modified DLL fails. Approval of Whisper does not automatically approve these helpers. Gatit's app, recorder, installer and uninstaller still require signatures.
+Tauri 2.12.3 also asks its hook to sign five upstream NSIS DLLs: `NSISdl.dll`, `StartMenu.dll`, `System.dll`, `nsDialogs.dll`, and `nsis_tauri_utils.dll`. The owner separately approved preserving these upstream files without signing them as Gatit's code on **17 October 2026**. This approval covers only the names, upstream release URLs and SHA-256 hashes recorded in `packaging/windows/nsis-upstream.json` (NSIS 3.13 and nsis-tauri-utils 0.5.3). The hook still requires `SIGNPATH_NSIS_UPSTREAM_APPROVED=true` and an exact hash match for each file. An unknown or modified DLL fails; changing the pinned files or adding another exception requires fresh review and owner approval. Gatit's app, recorder, installer and uninstaller still require signatures. This exception does not authorize provider agreements, account access or credential configuration.
 
 ### Microsoft Store MSIX
 
